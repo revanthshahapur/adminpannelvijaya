@@ -1,0 +1,20 @@
+{
+  "greetings": [
+    "Hello! I'm your AI assistant. How can I help you today?",
+    "Hi there! I'm here to help with student information, fees, faculty details and more.",
+    "Welcome! Ask me anything about the school management system."
+  ],
+  "students": {
+    "rahul sharma": "📚 **Rahul Sharma** (STU2098)\n- Class: 10-A\n- Attendance: 92%\n- Pending Fee: ₹20,000\n- Status: Active",
+    "ananya r": "📚 **Ananya R** (STU1785)\n- Class: 9-B\n- Attendance: 95%\n- Pending Fee: ₹12,500\n- Status: Active",
+    "default": "I found the student information. Would you like to see more details or check their fee status?"
+  },
+  "fees": {
+    "pending": "Here are students with pending fees:\n- Rahul Sharma: ₹20,000\n- Ananya R: ₹12,500\n\nWould you like to process a payment?",
+    "paid": "All fees collected this month: ₹77,500\nTotal outstanding: ₹32,500"
+  },
+  "faculty": {
+    "list": "Current Faculty:\n- Dr. Suresh Kumar (Mathematics) - 5 years exp\n- Priya Menon (Science) - 3 years exp\n\nNeed more details about any faculty member?"
+  },
+  "default": "I can help you with:\n- Student information\n- Fee management\n- Faculty details\n- Attendance records\n- Admission status\n\nWhat would you like to know?"
+}
