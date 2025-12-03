@@ -1,8 +1,9 @@
 import { useAppStore } from '@/stores/useAppStore';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Download, FileText } from 'lucide-react';
+import { Download, FileText, IndianRupee, TrendingUp } from 'lucide-react';
 import { motion } from 'framer-motion';
+import PaymentDialog from '@/components/PaymentDialog';
 
 const Payments = () => {
   const { feeRecords } = useAppStore();
@@ -15,11 +16,57 @@ const Payments = () => {
     }))
   );
 
+  const totalCollected = allPayments.reduce((sum, p) => sum + p.amount, 0);
+
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-3xl font-bold mb-2">Payment Receipts</h1>
-        <p className="text-muted-foreground">View and download all payment receipts</p>
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-3xl font-bold mb-2">Payment Receipts</h1>
+          <p className="text-muted-foreground">View, collect and download payment receipts</p>
+        </div>
+        <PaymentDialog />
+      </div>
+
+      {/* Stats Cards */}
+      <div className="grid gap-4 md:grid-cols-2">
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+        >
+          <Card className="glass-card border-primary/20">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-primary/10">
+                  <IndianRupee className="h-6 w-6 text-primary" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Collected</p>
+                  <p className="text-2xl font-bold">₹{totalCollected.toLocaleString()}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
+        <motion.div
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.1 }}
+        >
+          <Card className="glass-card border-green-500/20">
+            <CardContent className="p-6">
+              <div className="flex items-center gap-4">
+                <div className="p-3 rounded-xl bg-green-500/10">
+                  <TrendingUp className="h-6 w-6 text-green-500" />
+                </div>
+                <div>
+                  <p className="text-sm text-muted-foreground">Total Transactions</p>
+                  <p className="text-2xl font-bold">{allPayments.length}</p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </motion.div>
       </div>
 
       <motion.div
