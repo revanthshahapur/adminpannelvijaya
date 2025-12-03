@@ -14,6 +14,7 @@ import {
   Sun,
   Receipt,
   BookOpen,
+  Wallet,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
@@ -43,6 +44,7 @@ const Layout = () => {
     { to: '/faculty', icon: GraduationCap, label: 'Faculty' },
     { to: '/fees', icon: DollarSign, label: 'Fees' },
     { to: '/payments', icon: Receipt, label: 'Payments' },
+    { to: '/payroll', icon: Wallet, label: 'Payroll' },
     { to: '/courses', icon: BookOpen, label: 'Courses' },
     { to: '/settings', icon: Settings, label: 'Settings' },
   ];
