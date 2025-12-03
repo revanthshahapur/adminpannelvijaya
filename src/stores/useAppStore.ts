@@ -210,7 +210,9 @@ export const useAppStore = create<AppState>((set, get) => ({
   feeRecords: initialFeeRecords,
 
   login: (username, password) => {
-    if (username === 'admin' && password === 'admin123') {
+    const trimmedUsername = username.trim().toLowerCase();
+    const trimmedPassword = password.trim();
+    if (trimmedUsername === 'admin' && trimmedPassword === 'admin123') {
       const user = { username, isAuthenticated: true };
       set({ user });
       localStorage.setItem('user', JSON.stringify(user));
