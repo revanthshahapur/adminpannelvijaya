@@ -3,13 +3,15 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Card, CardContent } from '@/components/ui/card';
+import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
+import { Command, CommandEmpty, CommandGroup, CommandInput, CommandItem, CommandList } from '@/components/ui/command';
 import { useAppStore } from '@/stores/useAppStore';
 import { toast } from '@/hooks/use-toast';
-import { Plus, Banknote, Smartphone, FileText, Building2, CreditCard } from 'lucide-react';
+import { Plus, Banknote, Smartphone, FileText, Building2, CreditCard, ChevronsUpDown, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
+import { cn } from '@/lib/utils';
 
 const paymentMethods = [
   { id: 'cash', label: 'Cash', icon: Banknote, color: 'text-green-500' },
@@ -21,6 +23,7 @@ const paymentMethods = [
 const PaymentDialog = () => {
   const { students, feeRecords, addPayment } = useAppStore();
   const [open, setOpen] = useState(false);
+  const [studentSearchOpen, setStudentSearchOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState('');
   const [amount, setAmount] = useState('');
   const [method, setMethod] = useState('');
@@ -28,6 +31,8 @@ const PaymentDialog = () => {
   const [checkNumber, setCheckNumber] = useState('');
   const [bankName, setBankName] = useState('');
   const [upiId, setUpiId] = useState('school@upi');
+
+  const selectedStudentData = students.find((s) => s.id.toString() === selectedStudent);
 
   const selectedFeeRecord = feeRecords.find(
     (r) => r.studentId === parseInt(selectedStudent)
@@ -115,31 +120,66 @@ const PaymentDialog = () => {
         </DialogHeader>
 
         <div className="space-y-6 py-4">
-          {/* Student Selection */}
+          {/* Student Selection with Search */}
           <div className="space-y-2">
             <Label>Select Student *</Label>
-            <Select value={selectedStudent} onValueChange={setSelectedStudent}>
-              <SelectTrigger className="glass-card">
-                <SelectValue placeholder="Choose a student" />
-              </SelectTrigger>
-              <SelectContent className="bg-background border">
-                {students.map((student) => {
-                  const feeRecord = feeRecords.find((r) => r.studentId === student.id);
-                  return (
-                    <SelectItem key={student.id} value={student.id.toString()}>
-                      <span className="flex items-center gap-2">
-                        {student.name} ({student.regNo})
-                        {feeRecord && (
-                          <span className="text-xs text-muted-foreground">
-                            - Balance: ₹{feeRecord.balance.toLocaleString()}
-                          </span>
-                        )}
-                      </span>
-                    </SelectItem>
-                  );
-                })}
-              </SelectContent>
-            </Select>
+            <Popover open={studentSearchOpen} onOpenChange={setStudentSearchOpen}>
+              <PopoverTrigger asChild>
+                <Button
+                  variant="outline"
+                  role="combobox"
+                  aria-expanded={studentSearchOpen}
+                  className="w-full justify-between glass-card h-10"
+                >
+                  {selectedStudentData ? (
+                    <span>
+                      {selectedStudentData.name} ({selectedStudentData.regNo})
+                    </span>
+                  ) : (
+                    <span className="text-muted-foreground">Search or select student...</span>
+                  )}
+                  <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
+                </Button>
+              </PopoverTrigger>
+              <PopoverContent className="w-[400px] p-0 bg-background border" align="start">
+                <Command>
+                  <CommandInput placeholder="Search by name or reg number..." />
+                  <CommandList>
+                    <CommandEmpty>No student found.</CommandEmpty>
+                    <CommandGroup>
+                      {students.map((student) => {
+                        const feeRecord = feeRecords.find((r) => r.studentId === student.id);
+                        return (
+                          <CommandItem
+                            key={student.id}
+                            value={`${student.name} ${student.regNo}`}
+                            onSelect={() => {
+                              setSelectedStudent(student.id.toString());
+                              setStudentSearchOpen(false);
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Check
+                              className={cn(
+                                "mr-2 h-4 w-4",
+                                selectedStudent === student.id.toString() ? "opacity-100" : "opacity-0"
+                              )}
+                            />
+                            <div className="flex flex-col">
+                              <span className="font-medium">{student.name}</span>
+                              <span className="text-xs text-muted-foreground">
+                                {student.regNo} • Class: {student.class}
+                                {feeRecord && ` • Balance: ₹${feeRecord.balance.toLocaleString()}`}
+                              </span>
+                            </div>
+                          </CommandItem>
+                        );
+                      })}
+                    </CommandGroup>
+                  </CommandList>
+                </Command>
+              </PopoverContent>
+            </Popover>
           </div>
 
           {/* Fee Summary */}
