@@ -13,6 +13,7 @@ import StudentProfile from "./pages/StudentProfile";
 import Faculty from "./pages/Faculty";
 import Fees from "./pages/Fees";
 import Payments from "./pages/Payments";
+import Payroll from "./pages/Payroll";
 import Courses from "./pages/Courses";
 import Settings from "./pages/Settings";
 
@@ -48,6 +49,7 @@ const App = () => (
             <Route path="faculty" element={<Faculty />} />
             <Route path="fees" element={<Fees />} />
             <Route path="payments" element={<Payments />} />
+            <Route path="payroll" element={<Payroll />} />
             <Route path="courses" element={<Courses />} />
             <Route path="settings" element={<Settings />} />
             <Route index element={<Navigate to="/dashboard" replace />} />
