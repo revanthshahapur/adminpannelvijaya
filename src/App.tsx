@@ -16,6 +16,7 @@ import Payments from "./pages/Payments";
 import Payroll from "./pages/Payroll";
 import Courses from "./pages/Courses";
 import Settings from "./pages/Settings";
+import Notifications from "./pages/Notifications";
 
 const queryClient = new QueryClient();
 
@@ -42,6 +43,7 @@ const App = () => (
             }
           >
             <Route path="dashboard" element={<Dashboard />} />
+            <Route path="notifications" element={<Notifications />} />
             <Route path="students" element={<Students />} />
             <Route path="students/new" element={<StudentForm />} />
             <Route path="students/:id" element={<StudentProfile />} />

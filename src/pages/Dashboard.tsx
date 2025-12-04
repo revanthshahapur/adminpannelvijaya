@@ -79,7 +79,7 @@ const Dashboard = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2">Dashboard</h1>
-        <p className="text-muted-foreground">Welcome back! Here's your school overview</p>
+        <p className="text-muted-foreground">Welcome back!</p>
       </div>
 
       {/* Stats grid */}

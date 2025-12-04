@@ -59,14 +59,17 @@ const Students = () => {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-4">
         <div>
           <h1 className="text-3xl font-bold mb-2">Students</h1>
           <p className="text-muted-foreground">Manage student records and information</p>
         </div>
-        <Button onClick={() => navigate('/students/new')} className="glow">
+        <Button
+          onClick={() => navigate('/students/new')}
+          className="rounded-full px-5 glow"
+        >
           <Plus className="h-4 w-4 mr-2" />
-          Add Student
+          Add New Student
         </Button>
       </div>
 

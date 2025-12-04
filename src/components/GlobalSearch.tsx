@@ -5,7 +5,11 @@ import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useNavigate } from 'react-router-dom';
 
-const GlobalSearch = () => {
+interface GlobalSearchProps {
+  className?: string;
+}
+
+const GlobalSearch = ({ className }: GlobalSearchProps) => {
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<any[]>([]);
   const [isOpen, setIsOpen] = useState(false);
@@ -65,7 +69,7 @@ const GlobalSearch = () => {
   };
 
   return (
-    <div ref={searchRef} className="relative w-full max-w-md">
+    <div ref={searchRef} className={cn('relative w-full', className ?? 'max-w-md')}>
       <div className="relative">
         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
         <Input
