@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useAppStore } from '@/stores/useAppStore';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
+import { Input, Textarea } from '@/components/ui/input';
 import { Card, CardContent } from '@/components/ui/card';
 import {
   Table,
@@ -25,19 +25,16 @@ import {
   AccordionContent,
 } from '@/components/ui/accordion';
 import { Label } from '@/components/ui/label';
-import { Plus, Search, Edit, Trash2, Home } from 'lucide-react';
+import { Plus, Edit, Trash2, Home } from 'lucide-react';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
 const Faculty = () => {
   const { faculty, addFaculty, updateFaculty, deleteFaculty } = useAppStore();
 
-  // TODO: Replace with API fetch
   const [search, setSearch] = useState('');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const [editingFaculty, setEditingFaculty] = useState<any>(null);
-
-  const [sameAsPermanent, setSameAsPermanent] = useState(true);
 
   const [formData, setFormData] = useState({
     employeeType: '',
@@ -49,16 +46,23 @@ const Faculty = () => {
     qualifications: [
       { level: '', degreeName: '', otherDegree: '', year: '', board: '' },
     ],
-    permanentAddress: '',
-    permanentState: '',
-    permanentDistrict: '',
-    permanentCity: '',
-    permanentPinCode: '',
-    currentAddress: '',
-    currentState: '',
-    currentDistrict: '',
-    currentCity: '',
-    currentPinCode: '',
+    addressDetails: {
+      permanentAddress: {
+        addressLine: '',
+        state: '',
+        district: '',
+        city: '',
+        pinCode: '',
+      },
+      currentAddressSameAsPermanent: true,
+      currentAddress: {
+        addressLine: '',
+        state: '',
+        district: '',
+        city: '',
+        pinCode: '',
+      },
+    },
   });
 
   const handleQualificationChange = (index: number, key: string, value: string) => {
@@ -87,18 +91,15 @@ const Faculty = () => {
 
     const payload = {
       ...formData,
-      currentAddress: sameAsPermanent ? formData.permanentAddress : formData.currentAddress,
-      currentState: sameAsPermanent ? formData.permanentState : formData.currentState,
-      currentDistrict: sameAsPermanent
-        ? formData.permanentDistrict
-        : formData.currentDistrict,
-      currentCity: sameAsPermanent ? formData.permanentCity : formData.currentCity,
-      currentPinCode: sameAsPermanent
-        ? formData.permanentPinCode
-        : formData.currentPinCode,
+      addressDetails: {
+        ...formData.addressDetails,
+        currentAddress: formData.addressDetails.currentAddressSameAsPermanent
+          ? { ...formData.addressDetails.permanentAddress }
+          : { ...formData.addressDetails.currentAddress },
+      },
     };
 
-    // TODO: Submit payload to API
+    // TODO: Replace with API call
     editingFaculty
       ? updateFaculty(editingFaculty.id, payload)
       : addFaculty(payload);
@@ -110,6 +111,20 @@ const Faculty = () => {
   const handleClose = () => {
     setIsAddOpen(false);
     setEditingFaculty(null);
+    setFormData({
+      employeeType: '',
+      name: '',
+      department: '',
+      experience: '',
+      phone: '',
+      aadhaar: '',
+      qualifications: [{ level: '', degreeName: '', otherDegree: '', year: '', board: '' }],
+      addressDetails: {
+        permanentAddress: { addressLine: '', state: '', district: '', city: '', pinCode: '' },
+        currentAddressSameAsPermanent: true,
+        currentAddress: { addressLine: '', state: '', district: '', city: '', pinCode: '' },
+      },
+    });
   };
 
   const filteredFaculty = faculty.filter(
@@ -137,9 +152,7 @@ const Faculty = () => {
 
           <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle>
-                {editingFaculty ? 'Edit Faculty' : 'Add Faculty'}
-              </DialogTitle>
+              <DialogTitle>{editingFaculty ? 'Edit Faculty' : 'Add Faculty'}</DialogTitle>
             </DialogHeader>
 
             <form onSubmit={handleSubmit} className="space-y-6">
@@ -164,9 +177,7 @@ const Faculty = () => {
                   <Label>Name *</Label>
                   <Input
                     value={formData.name}
-                    onChange={(e) =>
-                      setFormData({ ...formData, name: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   />
                 </div>
 
@@ -195,9 +206,7 @@ const Faculty = () => {
                   <Label>Phone *</Label>
                   <Input
                     value={formData.phone}
-                    onChange={(e) =>
-                      setFormData({ ...formData, phone: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
                   />
                 </div>
 
@@ -205,9 +214,7 @@ const Faculty = () => {
                   <Label>Aadhaar Number *</Label>
                   <Input
                     value={formData.aadhaar}
-                    onChange={(e) =>
-                      setFormData({ ...formData, aadhaar: e.target.value })
-                    }
+                    onChange={(e) => setFormData({ ...formData, aadhaar: e.target.value })}
                   />
                 </div>
               </div>
@@ -215,7 +222,6 @@ const Faculty = () => {
               {/* QUALIFICATIONS */}
               <div className="space-y-4">
                 <h4 className="text-sm font-semibold text-primary">Qualifications</h4>
-
                 {formData.qualifications.map((q, index) => (
                   <div key={index} className="grid gap-4 md:grid-cols-5">
                     <select
@@ -292,37 +298,204 @@ const Faculty = () => {
                     </div>
                   </AccordionTrigger>
 
-                  <AccordionContent className="pt-4">
-                    <div className="space-y-4">
-                      <Input
-                        placeholder="Permanent Address"
-                        className="glass"
-                        value={formData.permanentAddress}
-                        onChange={(e) =>
-                          setFormData({ ...formData, permanentAddress: e.target.value })
+                  <AccordionContent className="pt-4 space-y-4">
+                    {/* Permanent Address */}
+                    <h4 className="text-sm font-semibold">Permanent Address</h4>
+                    <Input
+                      placeholder="Address Line"
+                      className="glass"
+                      value={formData.addressDetails.permanentAddress.addressLine}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          addressDetails: {
+                            ...formData.addressDetails,
+                            permanentAddress: {
+                              ...formData.addressDetails.permanentAddress,
+                              addressLine: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    />
+                    <Input
+                      placeholder="State"
+                      className="glass"
+                      value={formData.addressDetails.permanentAddress.state}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          addressDetails: {
+                            ...formData.addressDetails,
+                            permanentAddress: {
+                              ...formData.addressDetails.permanentAddress,
+                              state: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    />
+                    <Input
+                      placeholder="District"
+                      className="glass"
+                      value={formData.addressDetails.permanentAddress.district}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          addressDetails: {
+                            ...formData.addressDetails,
+                            permanentAddress: {
+                              ...formData.addressDetails.permanentAddress,
+                              district: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    />
+                    <Input
+                      placeholder="City"
+                      className="glass"
+                      value={formData.addressDetails.permanentAddress.city}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          addressDetails: {
+                            ...formData.addressDetails,
+                            permanentAddress: {
+                              ...formData.addressDetails.permanentAddress,
+                              city: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    />
+                    <Input
+                      placeholder="PIN Code"
+                      className="glass"
+                      value={formData.addressDetails.permanentAddress.pinCode}
+                      onChange={(e) =>
+                        setFormData({
+                          ...formData,
+                          addressDetails: {
+                            ...formData.addressDetails,
+                            permanentAddress: {
+                              ...formData.addressDetails.permanentAddress,
+                              pinCode: e.target.value,
+                            },
+                          },
+                        })
+                      }
+                    />
+
+                    {/* Current Address Same as Permanent */}
+                    <label className="flex items-center gap-2 text-sm">
+                      <input
+                        type="checkbox"
+                        checked={formData.addressDetails.currentAddressSameAsPermanent}
+                        onChange={() =>
+                          setFormData({
+                            ...formData,
+                            addressDetails: {
+                              ...formData.addressDetails,
+                              currentAddressSameAsPermanent:
+                                !formData.addressDetails.currentAddressSameAsPermanent,
+                            },
+                          })
                         }
                       />
+                      Current address same as permanent
+                    </label>
 
-                      <label className="flex items-center gap-2 text-sm">
-                        <input
-                          type="checkbox"
-                          checked={sameAsPermanent}
-                          onChange={() => setSameAsPermanent(!sameAsPermanent)}
-                        />
-                        Current address same as permanent
-                      </label>
-
-                      {!sameAsPermanent && (
+                    {!formData.addressDetails.currentAddressSameAsPermanent && (
+                      <>
+                        <h4 className="text-sm font-semibold">Current Address</h4>
                         <Input
-                          placeholder="Current Address"
+                          placeholder="Address Line"
                           className="glass"
-                          value={formData.currentAddress}
+                          value={formData.addressDetails.currentAddress.addressLine}
                           onChange={(e) =>
-                            setFormData({ ...formData, currentAddress: e.target.value })
+                            setFormData({
+                              ...formData,
+                              addressDetails: {
+                                ...formData.addressDetails,
+                                currentAddress: {
+                                  ...formData.addressDetails.currentAddress,
+                                  addressLine: e.target.value,
+                                },
+                              },
+                            })
                           }
                         />
-                      )}
-                    </div>
+                        <Input
+                          placeholder="State"
+                          className="glass"
+                          value={formData.addressDetails.currentAddress.state}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              addressDetails: {
+                                ...formData.addressDetails,
+                                currentAddress: {
+                                  ...formData.addressDetails.currentAddress,
+                                  state: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                        <Input
+                          placeholder="District"
+                          className="glass"
+                          value={formData.addressDetails.currentAddress.district}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              addressDetails: {
+                                ...formData.addressDetails,
+                                currentAddress: {
+                                  ...formData.addressDetails.currentAddress,
+                                  district: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                        <Input
+                          placeholder="City"
+                          className="glass"
+                          value={formData.addressDetails.currentAddress.city}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              addressDetails: {
+                                ...formData.addressDetails,
+                                currentAddress: {
+                                  ...formData.addressDetails.currentAddress,
+                                  city: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                        <Input
+                          placeholder="PIN Code"
+                          className="glass"
+                          value={formData.addressDetails.currentAddress.pinCode}
+                          onChange={(e) =>
+                            setFormData({
+                              ...formData,
+                              addressDetails: {
+                                ...formData.addressDetails,
+                                currentAddress: {
+                                  ...formData.addressDetails.currentAddress,
+                                  pinCode: e.target.value,
+                                },
+                              },
+                            })
+                          }
+                        />
+                      </>
+                    )}
                   </AccordionContent>
                 </AccordionItem>
               </Accordion>
@@ -331,9 +504,7 @@ const Faculty = () => {
                 <Button variant="outline" type="button" onClick={handleClose}>
                   Cancel
                 </Button>
-                <Button type="submit">
-                  {editingFaculty ? 'Update' : 'Add'} Faculty
-                </Button>
+                <Button type="submit">{editingFaculty ? 'Update' : 'Add'} Faculty</Button>
               </div>
             </form>
           </DialogContent>
@@ -364,11 +535,12 @@ const Faculty = () => {
                     <TableCell>{fac.employeeType}</TableCell>
                     <TableCell>{fac.department}</TableCell>
                     <TableCell>
-                      {Array.isArray(fac.qualification) && fac.qualification.map((q: any, i: number) => (
-                        <div key={i} className="text-xs">
-                          {q.level} {q.degreeName || q.otherDegree} ({q.year})
-                        </div>
-                      ))}
+                      {Array.isArray(fac.qualification) &&
+                        fac.qualification.map((q: any, i: number) => (
+                          <div key={i} className="text-xs">
+                            {q.level} {q.degreeName || q.otherDegree} ({q.year})
+                          </div>
+                        ))}
                     </TableCell>
                     <TableCell>{fac.experience}</TableCell>
                     <TableCell>{fac.phone}</TableCell>
@@ -385,17 +557,14 @@ const Faculty = () => {
                             experience: fac.experience || '',
                             phone: fac.phone || '',
                             aadhaar: fac.aadhaar || '',
-                            qualifications: Array.isArray(fac.qualification) ? fac.qualification : [{ level: '', degreeName: '', otherDegree: '', year: '', board: '' }],
-                            permanentAddress: fac.permanentAddress || '',
-                            permanentState: fac.permanentState || '',
-                            permanentDistrict: fac.permanentDistrict || '',
-                            permanentCity: fac.permanentCity || '',
-                            permanentPinCode: fac.permanentPinCode || '',
-                            currentAddress: fac.currentAddress || '',
-                            currentState: fac.currentState || '',
-                            currentDistrict: fac.currentDistrict || '',
-                            currentCity: fac.currentCity || '',
-                            currentPinCode: fac.currentPinCode || '',
+                            qualifications: Array.isArray(fac.qualification)
+                              ? fac.qualification
+                              : [{ level: '', degreeName: '', otherDegree: '', year: '', board: '' }],
+                            addressDetails: fac.addressDetails || {
+                              permanentAddress: { addressLine: '', state: '', district: '', city: '', pinCode: '' },
+                              currentAddressSameAsPermanent: true,
+                              currentAddress: { addressLine: '', state: '', district: '', city: '', pinCode: '' },
+                            },
                           });
                           setIsAddOpen(true);
                         }}

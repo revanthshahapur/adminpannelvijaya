@@ -27,6 +27,7 @@ interface Student {
 }
 
 interface Faculty {
+  addressDetails: { permanentAddress: { addressLine: string; state: string; district: string; city: string; pinCode: string; }; currentAddressSameAsPermanent: true; currentAddress: { addressLine: string; state: string; district: string; city: string; pinCode: string; }; };
   permanentAddress: string;
   permanentState: string;
   permanentDistrict: string;
