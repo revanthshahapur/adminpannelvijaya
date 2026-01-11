@@ -9,7 +9,10 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import loginBackground from '@/assets/login.webp';
 
-const API_BASE_URL = 'https://my-school-services-api.onrender.com/api/auth/signin';
+// ============================================================================
+// API CONFIGURATION - COMMENTED OUT BECAUSE BACKEND IS NOT RUNNING
+// ============================================================================
+// const API_BASE_URL = 'https://my-school-services-api.onrender.com/api/auth/signin';
 
 const Login = () => {
   const [username, setUsername] = useState('');
@@ -20,26 +23,46 @@ const Login = () => {
   const location = useLocation();
   const isAdminLogin = location.pathname === '/admin-login';
 
+  // ============================================================================
+  // DUMMY LOGIN CREDENTIALS (Backend is not running)
+  // Username: admin
+  // Password: admin123
+  // ============================================================================
+
   // Debug: Log route detection
   useEffect(() => {
     console.log('🔍 Login page - Current path:', location.pathname);
     console.log('🔍 Is Admin Login:', isAdminLogin);
-    console.log('🔍 API URL will be:', isAdminLogin ? API_BASE_URL : 'Local login');
+    // console.log('🔍 API URL will be:', isAdminLogin ? API_BASE_URL : 'Local login');
+    console.log('🔍 Using dummy login - Backend is not running');
   }, [location.pathname, isAdminLogin]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     
-    // Debug: Log everything
-    console.log('🚀 Form submitted!');
-    console.log('🚀 Current path:', location.pathname);
-    console.log('🚀 isAdminLogin:', isAdminLogin);
-    console.log('🚀 Username:', username);
-    console.log('🚀 Password length:', password.length);
-    
     setIsLoading(true);
 
     try {
+      // ============================================================================
+      // DUMMY LOGIN - Backend API is not running, using local authentication
+      // ============================================================================
+      const trimmedUsername = username.trim();
+      const trimmedPassword = password.trim();
+
+      // Use the store's login function which checks for admin/admin123
+      const loginSuccess = login(trimmedUsername, trimmedPassword);
+
+      if (loginSuccess) {
+        toast.success(`Welcome back, ${trimmedUsername}!`);
+        navigate('/dashboard');
+      } else {
+        toast.error('Invalid credentials. Use: admin / admin123');
+      }
+
+      // ============================================================================
+      // API LOGIN CODE - COMMENTED OUT BECAUSE BACKEND IS NOT RUNNING
+      // ============================================================================
+      /*
       // Always use API endpoint
       console.log('✅ API Login - Making API call to:', API_BASE_URL);
       console.log('🔐 Request body:', { 
@@ -165,21 +188,19 @@ const Login = () => {
             toast.error(errorMsg);
           }
         }
+      */
     } catch (error: any) {
-      console.error('❌❌❌ OUTER CATCH ERROR ❌❌❌');
-      console.error('Error type:', typeof error);
-      console.error('Error name:', error?.name);
-      console.error('Error message:', error?.message);
-      console.error('Full error:', error);
-      console.error('Error stack:', error?.stack);
-      toast.error(`Login error: ${error?.message || 'Unknown error'} - Check console`);
+      console.error('❌ Login error:', error);
+      toast.error(`Login error: ${error?.message || 'Unknown error'}`);
     } finally {
-      console.log('🏁 Finally block - setting loading to false');
       setIsLoading(false);
     }
   };
   
-  // Test function to manually trigger API call
+  // ============================================================================
+  // TEST API FUNCTION - COMMENTED OUT BECAUSE BACKEND IS NOT RUNNING
+  // ============================================================================
+  /*
   const testAPICall = async () => {
     console.log('🧪 TEST: Manual API call triggered');
     setIsLoading(true);
@@ -217,6 +238,7 @@ const Login = () => {
       setIsLoading(false);
     }
   };
+  */
 
   return (
     <div className="relative min-h-screen w-full flex items-center justify-center p-4 overflow-hidden bg-slate-950">
@@ -257,6 +279,7 @@ const Login = () => {
         transition={{ duration: 0.5 }}
         className="w-full max-w-md relative z-10"
       >
+        
         <div className="glass-card p-8 space-y-6">
           {/* Logo & Title */}
           <div className="text-center space-y-2">
@@ -273,11 +296,12 @@ const Login = () => {
               <Sparkles className="h-4 w-4 animate-glow-pulse" />
               AI-Powered Admin Panel
             </p>
-            {isAdminLogin && (
-              <div className="mt-2 px-3 py-1 rounded-full bg-primary/20 text-primary text-xs font-semibold">
-                🔐 API Login Mode - Check Network Tab
-              </div>
-            )}
+            <div className="mt-2 px-3 py-1 rounded-full bg-yellow-500/20 text-yellow-400 text-xs font-semibold">
+              ⚠️ Dummy Login Mode - Backend not running
+            </div>
+            <div className="mt-1 px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs">
+              Credentials: admin / admin123
+            </div>
           </div>
 
           {/* Login form */}
@@ -287,7 +311,7 @@ const Login = () => {
               <Input
                 id="username"
                 type="text"
-                placeholder={isAdminLogin ? 'test1' : 'admin'}
+                placeholder="admin"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 required
@@ -300,7 +324,7 @@ const Login = () => {
               <Input
                 id="password"
                 type="password"
-                placeholder="••••••••"
+                placeholder="admin123"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 required
@@ -322,8 +346,8 @@ const Login = () => {
             </Button>
           </form>
           
-          {/* Test API Button - Remove in production */}
-          {isAdminLogin && (
+          {/* Test API Button - Commented out because backend is not running */}
+          {/* {isAdminLogin && (
             <Button 
               type="button" 
               variant="outline" 
@@ -333,7 +357,7 @@ const Login = () => {
             >
               🧪 Test API Call (Check Network Tab)
             </Button>
-          )}
+          )} */}
 
         </div>
 

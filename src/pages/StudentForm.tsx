@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
-import { useForm } from 'react-hook-form';
+import { useForm, useFieldArray } from 'react-hook-form';
 import {
   Breadcrumb,
   BreadcrumbItem,
@@ -68,45 +68,60 @@ type UploadedDoc = {
   url: string;
 };
 
+type Relation = {
+  relation: string;
+  otherRelation?: string;
+  name: string;
+  occupation: string;
+  contact: string;
+};
+
 type StudentFormValues = {
   fullName: string;
-  aadhaarNumber: string;
+  aadhaarNumber?: string;
   dateOfBirth: string;
   gender: 'Male' | 'Female' | 'Other';
   bloodGroup: string;
   nationality: string;
-  religion: string;
-  category: 'General' | 'OBC' | 'SC' | 'ST' | 'EWS';
+  religion?: string;
+  category?: string;
+  subCaste?: string;
   disability: boolean;
 
   permanentAddress: string;
+  permanentState: string;
+  permanentDistrict: string;
+  permanentCity: string;
+  permanentPinCode: string;
   currentAddress: string;
+  currentState: string;
+  currentDistrict: string;
+  currentCity: string;
+  currentPinCode: string;
   sameAsPermanent: boolean;
-  state: string;
-  district: string;
-  city: string;
-  pinCode: string;
-  studentPhone?: string;
-  parentPhone: string;
-  email: string;
 
   fatherName: string;
+  fatherOccupation: string;
+  fatherContact: string;
   motherName: string;
+  motherOccupation: string;
+  motherContact: string;
   guardianName?: string;
-  parentOccupation: string;
-  parentIncome: string;
-  emergencyContact: string;
+  guardianOccupation?: string;
+  guardianContact?: string;
 
   admissionNumber: string;
   courseClass: string;
-  sectionBatch: string;
-  previousInstitute: string;
-  boardUniversity: string;
-  medium: 'English' | 'Kannada' | 'Hindi';
   admissionYear: string;
+  previousInstitute?: string;
+  previousClass?: string;
+  previousMarks?: string;
+  boardUniversity?: string;
 
   transport: FacilityToggle;
   hostel: FacilityToggle;
+
+  relations: Relation[];
 
   documents: {
     studentPhoto?: UploadedDoc;
@@ -121,9 +136,9 @@ type StudentFormValues = {
 
 const SECTION_KEYS = [
   'personal',
+  'academic',
   'contact',
   'parents',
-  'academic',
   'facilities',
   'documents',
 ] as const;
@@ -156,34 +171,39 @@ const StudentForm = () => {
       bloodGroup: '',
       nationality: 'Indian',
       religion: '',
-      category: (existingStudent?.caste as StudentFormValues['category']) ?? 'General',
+      category: existingStudent?.caste ?? '',
+      subCaste: '',
       disability: false,
 
       permanentAddress: existingStudent?.address ?? '',
+      permanentState: '',
+      permanentDistrict: '',
+      permanentCity: '',
+      permanentPinCode: '',
       currentAddress: existingStudent?.address ?? '',
-      sameAsPermanent: true,
-      state: '',
-      district: '',
-      city: '',
-      pinCode: '',
-      studentPhone: existingStudent?.phone ?? '',
-      parentPhone: existingStudent?.phone ?? '',
-      email: '',
+      currentState: '',
+      currentDistrict: '',
+      currentCity: '',
+    currentPinCode: '',
+    sameAsPermanent: true,
 
-      fatherName: existingStudent?.father ?? '',
-      motherName: existingStudent?.mother ?? '',
-      guardianName: '',
-      parentOccupation: '',
-      parentIncome: existingStudent?.income ? existingStudent.income.toString() : '',
-      emergencyContact: existingStudent?.phone ?? '',
+    fatherName: existingStudent?.father ?? '',
+    fatherOccupation: '',
+    fatherContact: existingStudent?.phone ?? '',
+    motherName: existingStudent?.mother ?? '',
+    motherOccupation: '',
+    motherContact: '',
+    guardianName: '',
+    guardianOccupation: '',
+    guardianContact: '',
 
-      admissionNumber: existingStudent?.regNo ?? '',
+    admissionNumber: existingStudent?.regNo ?? '',
       courseClass: existingStudent?.class ?? '',
-      sectionBatch: '',
-      previousInstitute: existingStudent?.previousSchool ?? '',
-      boardUniversity: '',
-      medium: 'English',
       admissionYear: currentYear,
+      previousInstitute: existingStudent?.previousSchool ?? '',
+      previousClass: '',
+      previousMarks: '',
+      boardUniversity: '',
 
       transport: {
         enabled: false,
@@ -194,20 +214,59 @@ const StudentForm = () => {
         details: {},
       },
 
+      relations: [
+        {
+          relation: 'father',
+          name: existingStudent?.father ?? '',
+          occupation: '',
+          contact: existingStudent?.phone ?? '',
+        },
+        {
+          relation: 'mother',
+          name: existingStudent?.mother ?? '',
+          occupation: '',
+          contact: '',
+        },
+      ],
+
       documents: {},
     },
   });
 
+  const relations = useFieldArray({
+    control: form.control,
+    name: 'relations',
+  });
+
   const watchSameAddress = form.watch('sameAsPermanent');
+  const watchPermanentAddress = form.watch('permanentAddress');
+  const watchPermanentState = form.watch('permanentState');
+  const watchPermanentDistrict = form.watch('permanentDistrict');
+  const watchPermanentCity = form.watch('permanentCity');
+  const watchPermanentPinCode = form.watch('permanentPinCode');
+  const watchCourseClass = form.watch('courseClass');
   const watchTransport = form.watch('transport.enabled');
   const watchHostel = form.watch('hostel.enabled');
 
   useEffect(() => {
     if (watchSameAddress) {
-      const perm = form.getValues('permanentAddress');
-      form.setValue('currentAddress', perm);
+      form.setValue('currentAddress', watchPermanentAddress);
+      form.setValue('currentState', watchPermanentState);
+      form.setValue('currentDistrict', watchPermanentDistrict);
+      form.setValue('currentCity', watchPermanentCity);
+      form.setValue('currentPinCode', watchPermanentPinCode);
     }
-  }, [watchSameAddress, form]);
+  }, [watchSameAddress, watchPermanentAddress, watchPermanentState, watchPermanentDistrict, watchPermanentCity, watchPermanentPinCode, form]);
+
+  useEffect(() => {
+    if (watchCourseClass) {
+      const admissionNumber = form.getValues('admissionNumber');
+      if (!admissionNumber || !isEdit) {
+        const generated = generateAdmissionNumber(watchCourseClass);
+        form.setValue('admissionNumber', generated);
+      }
+    }
+  }, [watchCourseClass, isEdit, form]);
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -266,19 +325,19 @@ const StudentForm = () => {
       name: values.fullName,
       regNo: admissionNo,
       class: values.courseClass,
-      phone: values.parentPhone,
+      phone: values.fatherContact || values.motherContact || '',
       status: 'Active',
       father: values.fatherName,
       mother: values.motherName,
-      aadhaar: values.aadhaarNumber,
+      aadhaar: values.aadhaarNumber || '',
       address: values.permanentAddress,
       dob: values.dateOfBirth,
       gender: values.gender,
       marks: 0,
-      previousSchool: values.previousInstitute,
+      previousSchool: values.previousInstitute || '',
       hostel: values.hostel.enabled,
-      caste: values.category,
-      income: parseInt(values.parentIncome || '0', 10),
+      caste: values.category || '',
+      income: 0,
     };
 
     const jsonPayload = {
@@ -288,32 +347,47 @@ const StudentForm = () => {
           bloodGroup: values.bloodGroup,
           nationality: values.nationality,
           religion: values.religion,
+          category: values.category,
+          subCaste: values.subCaste,
           disability: values.disability,
         },
         contact: {
           permanentAddress: values.permanentAddress,
+          permanentState: values.permanentState,
+          permanentDistrict: values.permanentDistrict,
+          permanentCity: values.permanentCity,
+          permanentPinCode: values.permanentPinCode,
           currentAddress: values.currentAddress,
-          state: values.state,
-          district: values.district,
-          city: values.city,
-          pinCode: values.pinCode,
-          studentPhone: values.studentPhone,
-          parentPhone: values.parentPhone,
-          email: values.email,
+          currentState: values.currentState,
+          currentDistrict: values.currentDistrict,
+          currentCity: values.currentCity,
+          currentPinCode: values.currentPinCode,
         },
         parents: {
-          guardianName: values.guardianName,
-          occupation: values.parentOccupation,
-          income: values.parentIncome,
-          emergencyContact: values.emergencyContact,
+          father: {
+            name: values.fatherName,
+            occupation: values.fatherOccupation,
+            contact: values.fatherContact,
+          },
+          mother: {
+            name: values.motherName,
+            occupation: values.motherOccupation,
+            contact: values.motherContact,
+          },
+          guardian: {
+            name: values.guardianName,
+            occupation: values.guardianOccupation,
+            contact: values.guardianContact,
+          },
         },
         academic: {
           admissionNumber: admissionNo,
           courseClass: values.courseClass,
-          sectionBatch: values.sectionBatch,
-          boardUniversity: values.boardUniversity,
-          medium: values.medium,
           admissionYear: values.admissionYear,
+          previousInstitute: values.previousInstitute,
+          previousClass: values.previousClass,
+          previousMarks: values.previousMarks,
+          boardUniversity: values.boardUniversity,
         },
         facilities: {
           transport: values.transport,
@@ -474,16 +548,9 @@ const StudentForm = () => {
                       <FormField
                         control={form.control}
                         name="aadhaarNumber"
-                        rules={{
-                          required: 'Aadhaar number is required',
-                          minLength: { value: 12, message: 'Must be 12 digits' },
-                          maxLength: { value: 12, message: 'Must be 12 digits' },
-                        }}
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>
-                              Aadhaar Number <span className="text-destructive">*</span>
-                            </FormLabel>
+                            <FormLabel>Aadhaar Number</FormLabel>
                             <FormControl>
                               <Input
                                 {...field}
@@ -577,7 +644,20 @@ const StudentForm = () => {
                           <FormItem>
                             <FormLabel>Religion</FormLabel>
                             <FormControl>
-                              <Input {...field} className="glass" />
+                              <Select value={field.value || ''} onValueChange={field.onChange}>
+                                <SelectTrigger className="glass">
+                                  <SelectValue placeholder="Select religion" />
+                                </SelectTrigger>
+                                <SelectContent>
+                                  <SelectItem value="Hindu">Hindu</SelectItem>
+                                  <SelectItem value="Muslim">Muslim</SelectItem>
+                                  <SelectItem value="Christian">Christian</SelectItem>
+                                  <SelectItem value="Sikh">Sikh</SelectItem>
+                                  <SelectItem value="Buddhist">Buddhist</SelectItem>
+                                  <SelectItem value="Jain">Jain</SelectItem>
+                                  <SelectItem value="Other">Other</SelectItem>
+                                </SelectContent>
+                              </Select>
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -591,18 +671,25 @@ const StudentForm = () => {
                           <FormItem>
                             <FormLabel>Category</FormLabel>
                             <FormControl>
-                              <Select value={field.value} onValueChange={field.onChange}>
-                                <SelectTrigger className="glass">
-                                  <SelectValue placeholder="Select category" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  <SelectItem value="General">General</SelectItem>
-                                  <SelectItem value="OBC">OBC</SelectItem>
-                                  <SelectItem value="SC">SC</SelectItem>
-                                  <SelectItem value="ST">ST</SelectItem>
-                                  <SelectItem value="EWS">EWS</SelectItem>
-                                </SelectContent>
-                              </Select>
+                              <Input 
+                                {...field} 
+                                placeholder="e.g., General / OBC / SC / ST / EWS"
+                                className="glass" 
+                              />
+                            </FormControl>
+                            <FormMessage />
+                          </FormItem>
+                        )}
+                      />
+
+                      <FormField
+                        control={form.control}
+                        name="subCaste"
+                        render={({ field }) => (
+                          <FormItem>
+                            <FormLabel>Sub-caste</FormLabel>
+                            <FormControl>
+                              <Input {...field} className="glass" />
                             </FormControl>
                             <FormMessage />
                           </FormItem>
@@ -630,293 +717,15 @@ const StudentForm = () => {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 2. Contact & Address */}
-                <AccordionItem value="contact" className="border-none">
-                  <AccordionTrigger className="rounded-2xl bg-secondary px-4 py-3 hover:bg-secondary/80">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                        <Home className="h-4 w-4" />
-                      </div>
-                      <span className="text-sm font-semibold">2. Contact & Address</span>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <FormField
-                        control={form.control}
-                        name="permanentAddress"
-                        rules={{ required: 'Permanent address is required' }}
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2">
-                            <FormLabel>
-                              Permanent Address <span className="text-destructive">*</span>
-                            </FormLabel>
-                            <FormControl>
-                              <Textarea {...field} rows={3} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
 
-                      <FormField
-                        control={form.control}
-                        name="sameAsPermanent"
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2 flex items-center justify-between rounded-2xl bg-secondary px-4 py-3">
-                            <div>
-                              <FormLabel>Current address same as permanent</FormLabel>
-                              <p className="text-xs text-muted-foreground">
-                                Turn off if the student is staying in a hostel or rented house.
-                              </p>
-                            </div>
-                            <FormControl>
-                              <Switch checked={field.value} onCheckedChange={field.onChange} />
-                            </FormControl>
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="currentAddress"
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2">
-                            <FormLabel>Current Address</FormLabel>
-                            <FormControl>
-                              <Textarea
-                                {...field}
-                                rows={3}
-                                className="glass"
-                                disabled={watchSameAddress}
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="state"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>State</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="district"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>District</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="city"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>City / Town / Village</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="pinCode"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>PIN Code</FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                inputMode="numeric"
-                                maxLength={6}
-                                className="glass"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="studentPhone"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Student Phone (optional)</FormLabel>
-                            <FormControl>
-                              <Input {...field} inputMode="tel" className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="parentPhone"
-                        rules={{ required: 'Parent phone is required' }}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              Parent Phone <span className="text-destructive">*</span>
-                            </FormLabel>
-                            <FormControl>
-                              <Input {...field} inputMode="tel" className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
-                        name="email"
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2">
-                            <FormLabel>Email (student / parent)</FormLabel>
-                            <FormControl>
-                              <Input
-                                {...field}
-                                type="email"
-                                placeholder="name@example.com"
-                                className="glass"
-                              />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 3. Parent / Guardian */}
-                <AccordionItem value="parents" className="border-none">
-                  <AccordionTrigger className="rounded-2xl bg-secondary px-4 py-3 hover:bg-secondary/80">
-                    <div className="flex items-center gap-3">
-                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                        <Users className="h-4 w-4" />
-                      </div>
-                      <span className="text-sm font-semibold">
-                        3. Parent / Guardian Information
-                      </span>
-                    </div>
-                  </AccordionTrigger>
-                  <AccordionContent className="pt-4">
-                    <div className="grid gap-4 md:grid-cols-2">
-                      <FormField
-                        control={form.control}
-                        name="fatherName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Father Name</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="motherName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Mother Name</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="guardianName"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Guardian Name (optional)</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="parentOccupation"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Parent Occupation</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="parentIncome"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Parent Annual Income (₹)</FormLabel>
-                            <FormControl>
-                              <Input {...field} type="number" className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                      <FormField
-                        control={form.control}
-                        name="emergencyContact"
-                        rules={{ required: 'Emergency contact is required' }}
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>
-                              Emergency Contact <span className="text-destructive">*</span>
-                            </FormLabel>
-                            <FormControl>
-                              <Input {...field} inputMode="tel" className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-                    </div>
-                  </AccordionContent>
-                </AccordionItem>
-
-                {/* 4. Academic Information */}
+                {/* 2. Academic / Admission Information */}
                 <AccordionItem value="academic" className="border-none">
                   <AccordionTrigger className="rounded-2xl bg-secondary px-4 py-3 hover:bg-secondary/80">
                     <div className="flex items-center gap-3">
                       <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
                         <School className="h-4 w-4" />
                       </div>
-                      <span className="text-sm font-semibold">4. Academic Information</span>
+                      <span className="text-sm font-semibold">2. Academic / Admission Information</span>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="pt-4">
@@ -945,6 +754,7 @@ const StudentForm = () => {
                                   <SelectValue placeholder="Select class" />
                                 </SelectTrigger>
                                 <SelectContent>
+                                  <SelectItem value="1">1</SelectItem>
                                   <SelectItem value="VI">VI</SelectItem>
                                   <SelectItem value="VII">VII</SelectItem>
                                   <SelectItem value="VIII">VIII</SelectItem>
@@ -964,24 +774,12 @@ const StudentForm = () => {
 
                       <FormField
                         control={form.control}
-                        name="sectionBatch"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Section / Batch</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
-
-                      <FormField
-                        control={form.control}
                         name="admissionNumber"
                         render={({ field }) => (
                           <FormItem>
-                            <FormLabel>Admission Number (auto)</FormLabel>
+                            <FormLabel>
+                              Admission Number <span className="text-destructive">*</span>
+                            </FormLabel>
                             <FormControl>
                               <Input {...field} readOnly className="glass bg-muted/60" />
                             </FormControl>
@@ -1004,64 +802,422 @@ const StudentForm = () => {
                         )}
                       />
 
-                      <FormField
-                        control={form.control}
-                        name="previousInstitute"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Previous School / College</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                      {form.watch('courseClass') && form.watch('courseClass') !== '1' && (
+                        <div className="md:col-span-2 space-y-4 rounded-2xl border border-dashed border-primary/30 bg-primary/5 p-4">
+                          <h4 className="text-sm font-semibold text-primary">Previous Academic Details</h4>
+                          <div className="grid gap-4 md:grid-cols-2">
+                            <FormField
+                              control={form.control}
+                              name="previousInstitute"
+                              rules={{ required: 'Previous School / College is required' }}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    Previous School / College <span className="text-destructive">*</span>
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="glass" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
 
-                      <FormField
-                        control={form.control}
-                        name="boardUniversity"
-                        render={({ field }) => (
-                          <FormItem>
-                            <FormLabel>Board / University</FormLabel>
-                            <FormControl>
-                              <Input {...field} className="glass" />
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                            <FormField
+                              control={form.control}
+                              name="previousClass"
+                              rules={{ required: 'Previous Class is required' }}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    Previous Class <span className="text-destructive">*</span>
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="glass" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
 
-                      <FormField
-                        control={form.control}
-                        name="medium"
-                        render={({ field }) => (
-                          <FormItem className="md:col-span-2">
-                            <FormLabel>Medium</FormLabel>
-                            <FormControl>
-                              <RadioGroup
-                                className="flex flex-wrap gap-3"
-                                value={field.value}
-                                onValueChange={field.onChange}
-                              >
-                                {['English', 'Kannada', 'Hindi'].map((m) => (
-                                  <label
-                                    key={m}
-                                    className="flex cursor-pointer items-center gap-2 rounded-full bg-secondary px-3 py-1.5 text-xs"
-                                  >
-                                    <RadioGroupItem value={m as any} />
-                                    <span>{m}</span>
-                                  </label>
-                                ))}
-                              </RadioGroup>
-                            </FormControl>
-                            <FormMessage />
-                          </FormItem>
-                        )}
-                      />
+                            <FormField
+                              control={form.control}
+                              name="previousMarks"
+                              rules={{ required: 'Percentage or Marks is required' }}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    Percentage or Marks <span className="text-destructive">*</span>
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="glass" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+
+                            <FormField
+                              control={form.control}
+                              name="boardUniversity"
+                              rules={{ required: 'Board / University is required' }}
+                              render={({ field }) => (
+                                <FormItem>
+                                  <FormLabel>
+                                    Board / University <span className="text-destructive">*</span>
+                                  </FormLabel>
+                                  <FormControl>
+                                    <Input {...field} className="glass" />
+                                  </FormControl>
+                                  <FormMessage />
+                                </FormItem>
+                              )}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
                   </AccordionContent>
                 </AccordionItem>
+
+                {/* 3. Contact & Address */}
+                <AccordionItem value="contact" className="border-none">
+                  <AccordionTrigger className="rounded-2xl bg-secondary px-4 py-3 hover:bg-secondary/80">
+                    <div className="flex items-center gap-3">
+                      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                        <Home className="h-4 w-4" />
+                      </div>
+                      <span className="text-sm font-semibold">3. Address Information</span>
+                    </div>
+                  </AccordionTrigger>
+                  <AccordionContent className="pt-4">
+                    <div className="space-y-6">
+                      {/* Permanent Address Section */}
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-semibold text-primary">Permanent Address</h4>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <FormField
+                            control={form.control}
+                            name="permanentAddress"
+                            rules={{ required: 'Permanent address is required' }}
+                            render={({ field }) => (
+                              <FormItem className="md:col-span-2">
+                                <FormLabel>
+                                  Address Line <span className="text-destructive">*</span>
+                                </FormLabel>
+                                <FormControl>
+                                  <Textarea {...field} rows={3} className="glass" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="permanentState"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>State</FormLabel>
+                                <FormControl>
+                                  <Input {...field} className="glass" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="permanentDistrict"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>District</FormLabel>
+                                <FormControl>
+                                  <Input {...field} className="glass" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="permanentCity"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>City / Town / Village</FormLabel>
+                                <FormControl>
+                                  <Input {...field} className="glass" />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="permanentPinCode"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>PIN Code</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                    className="glass"
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Toggle */}
+                      <FormField
+                        control={form.control}
+                        name="sameAsPermanent"
+                        render={({ field }) => (
+                          <FormItem className="flex items-center justify-between rounded-2xl bg-secondary px-4 py-3">
+                            <div>
+                              <FormLabel>Current address same as permanent</FormLabel>
+                              <p className="text-xs text-muted-foreground">
+                                Turn off if the student is staying in a hostel or rented house.
+                              </p>
+                            </div>
+                            <FormControl>
+                              <Switch checked={field.value} onCheckedChange={field.onChange} />
+                            </FormControl>
+                          </FormItem>
+                        )}
+                      />
+
+                      {/* Current Address Section */}
+                      <div className="space-y-4">
+                        <h4 className="text-sm font-semibold text-primary">Current Address</h4>
+                        <div className="grid gap-4 md:grid-cols-2">
+                          <FormField
+                            control={form.control}
+                            name="currentAddress"
+                            render={({ field }) => (
+                              <FormItem className="md:col-span-2">
+                                <FormLabel>Address Line</FormLabel>
+                                <FormControl>
+                                  <Textarea
+                                    {...field}
+                                    rows={3}
+                                    className="glass"
+                                    disabled={watchSameAddress}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="currentState"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>State</FormLabel>
+                                <FormControl>
+                                  <Input {...field} className="glass" disabled={watchSameAddress} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="currentDistrict"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>District</FormLabel>
+                                <FormControl>
+                                  <Input {...field} className="glass" disabled={watchSameAddress} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="currentCity"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>City / Town / Village</FormLabel>
+                                <FormControl>
+                                  <Input {...field} className="glass" disabled={watchSameAddress} />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+
+                          <FormField
+                            control={form.control}
+                            name="currentPinCode"
+                            render={({ field }) => (
+                              <FormItem>
+                                <FormLabel>PIN Code</FormLabel>
+                                <FormControl>
+                                  <Input
+                                    {...field}
+                                    inputMode="numeric"
+                                    maxLength={6}
+                                    className="glass"
+                                    disabled={watchSameAddress}
+                                  />
+                                </FormControl>
+                                <FormMessage />
+                              </FormItem>
+                            )}
+                          />
+                        </div>
+                      </div>
+                    </div>
+                  </AccordionContent>
+                </AccordionItem>
+
+            {/* 3. Parent / Guardian */}
+<AccordionItem value="parents" className="border-none">
+  <AccordionTrigger className="rounded-2xl bg-secondary px-4 py-3 hover:bg-secondary/80">
+    <div className="flex items-center gap-3">
+      <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
+        <Users className="h-4 w-4" />
+      </div>
+      <span className="text-sm font-semibold">
+        4. Parent / Guardian Information
+      </span>
+    </div>
+  </AccordionTrigger>
+
+  <AccordionContent className="pt-4">
+    <div className="space-y-6">
+      {relations.fields.map((item, index) => (
+        <div key={item.id} className="space-y-4 rounded-2xl border p-4">
+          <div className="flex items-center justify-between">
+            <h4 className="text-sm font-semibold text-primary">
+              Relation {index + 1}
+            </h4>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-4">
+            {/* Relation Dropdown */}
+            <FormField
+              control={form.control}
+              name={`relations.${index}.relation`}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Relation</FormLabel>
+                  <FormControl>
+                    <select
+                      {...field}
+                      className="glass h-10 w-full rounded-md border px-3 text-sm"
+                    >
+                      <option value="">Select</option>
+                      <option value="father">Father</option>
+                      <option value="mother">Mother</option>
+                      <option value="guardian">Guardian</option>
+                      <option value="other">Other</option>
+                    </select>
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Other Relation Name */}
+            {form.watch(`relations.${index}.relation`) === "other" && (
+              <FormField
+                control={form.control}
+                name={`relations.${index}.otherRelation`}
+                render={({ field }) => (
+                  <FormItem>
+                    <FormLabel>Specify Relation</FormLabel>
+                    <FormControl>
+                      <Input {...field} className="glass" />
+                    </FormControl>
+                    <FormMessage />
+                  </FormItem>
+                )}
+              />
+            )}
+
+            {/* Name */}
+            <FormField
+              control={form.control}
+              name={`relations.${index}.name`}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Name</FormLabel>
+                  <FormControl>
+                    <Input {...field} className="glass" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Occupation */}
+            <FormField
+              control={form.control}
+              name={`relations.${index}.occupation`}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Occupation</FormLabel>
+                  <FormControl>
+                    <Input {...field} className="glass" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+
+            {/* Contact */}
+            <FormField
+              control={form.control}
+              name={`relations.${index}.contact`}
+              render={({ field }) => (
+                <FormItem>
+                  <FormLabel>Contact Number</FormLabel>
+                  <FormControl>
+                    <Input {...field} type="tel" className="glass" />
+                  </FormControl>
+                  <FormMessage />
+                </FormItem>
+              )}
+            />
+          </div>
+        </div>
+      ))}
+
+      {/* Add Relation Button */}
+      <Button
+        type="button"
+        variant="outline"
+        className="flex items-center gap-2"
+        onClick={() =>
+          relations.append({
+            relation: "",
+            otherRelation: "",
+            name: "",
+            occupation: "",
+            contact: "",
+          })
+        }
+      >
+        + Add Relation
+      </Button>
+    </div>
+  </AccordionContent>
+</AccordionItem>
 
                 {/* 5. Facilities */}
                 <AccordionItem value="facilities" className="border-none">
@@ -1070,7 +1226,7 @@ const StudentForm = () => {
                       <div className="flex h-8 w-8 items-center justify-center rounded-xl bg-primary/10 text-primary">
                         <Bus className="h-4 w-4" />
                       </div>
-                      <span className="text-sm font-semibold">5. Facilities</span>
+                      <span className="text-sm font-semibold">5. Transport & Hostel</span>
                     </div>
                   </AccordionTrigger>
                   <AccordionContent className="space-y-4 pt-4">
@@ -1206,7 +1362,8 @@ const StudentForm = () => {
                   </AccordionContent>
                 </AccordionItem>
 
-                {/* 6. Documents */}
+                {/* 6. Documents - COMMENTED OUT FOR FUTURE USE */}
+                {/*
                 <AccordionItem value="documents" className="border-none">
                   <AccordionTrigger className="rounded-2xl bg-secondary px-4 py-3 hover:bg-secondary/80">
                     <div className="flex items-center gap-3">
@@ -1277,6 +1434,7 @@ const StudentForm = () => {
                     </div>
                   </AccordionContent>
                 </AccordionItem>
+                */}
               </Accordion>
             </CardContent>
           </Card>

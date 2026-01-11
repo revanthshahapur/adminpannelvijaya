@@ -27,6 +27,18 @@ interface Student {
 }
 
 interface Faculty {
+  permanentAddress: string;
+  permanentState: string;
+  permanentDistrict: string;
+  permanentCity: string;
+  permanentPinCode: string;
+  currentAddress: string;
+  currentState: string;
+  currentDistrict: string;
+  currentCity: string;
+  currentPinCode: string;
+  aadhaar: string;
+  employeeType: ReactNode;
   id: number;
   name: string;
   department: string;

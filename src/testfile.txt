@@ -1,0 +1,91 @@
+{
+  "name": "Rahul Sharma",
+  "regNo": "2024VI1234",
+  "class": "VI",
+  "phone": "9876543210",
+  "status": "Active",
+  "father": "Ram Sharma",
+  "mother": "Suman Sharma",
+  "aadhaar": "123412341234",
+  "address": "123, MG Road, Near City Mall",
+  "dob": "2008-05-15",
+  "gender": "Male",
+  "marks": 0,
+  "previousSchool": "ABC High School",
+  "hostel": false,
+  "caste": "General",
+  "income": 0,
+  "extended": {
+    "personal": {
+      "bloodGroup": "B+",
+      "nationality": "Indian",
+      "religion": "Hindu",
+      "category": "General",
+      "subCaste": "Brahmin",
+      "disability": false
+    },
+    "contact": {
+      "permanentAddress": "123, MG Road, Near City Mall",
+      "permanentState": "Karnataka",
+      "permanentDistrict": "Bangalore Urban",
+      "permanentCity": "Bengaluru",
+      "permanentPinCode": "560001",
+      "currentAddress": "123, MG Road, Near City Mall",
+      "currentState": "Karnataka",
+      "currentDistrict": "Bangalore Urban",
+      "currentCity": "Bengaluru",
+      "currentPinCode": "560001"
+    },
+    "parents": {
+      "father": {
+        "name": "Ram Sharma",
+        "occupation": "Engineer",
+        "contact": "9876543210"
+      },
+      "mother": {
+        "name": "Suman Sharma",
+        "occupation": "Teacher",
+        "contact": "9876543211"
+      },
+      "guardian": {
+        "name": "",
+        "occupation": "",
+        "contact": ""
+      }
+    },
+    "academic": {
+      "admissionNumber": "2024VI1234",
+      "courseClass": "VI",
+      "admissionYear": "2024",
+      "previousInstitute": "ABC High School",
+      "previousClass": "V",
+      "previousMarks": "85%",
+      "boardUniversity": "Karnataka State Board"
+    },
+    "facilities": {
+      "transport": {
+        "enabled": true,
+        "details": {
+          "transportRoute": "Route 3 – Vijayanagar",
+          "busNumber": "KA-02-1234"
+        }
+      },
+      "hostel": {
+        "enabled": false,
+        "details": {}
+      }
+    },
+    "documents": {
+      "studentPhoto": {
+        "fileName": "rahul_photo.jpg",
+        "fileType": "image/jpeg",
+        "url": "https://example.com/uploads/students/rahul_photo.jpg"
+      },
+      "aadhaarCard": {
+        "fileName": "rahul_aadhaar.pdf",
+        "fileType": "application/pdf",
+        "url": "https://example.com/uploads/students/rahul_aadhaar.pdf"
+      }
+    }
+  }
+}
