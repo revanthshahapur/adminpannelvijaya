@@ -1,18 +1,75 @@
 import { useForm, useFieldArray } from "react-hook-form";
 import { toast } from "sonner";
+import { Card, CardContent } from "@/components/ui/card";
+import { Input } from "@/components/ui/input";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+
+type Relation = {
+  name: string;
+  contact: string;
+  occupation: string;
+  email?: string;
+  relation: string;
+  otherRelation?: string;
+};
+
+type StudentFormValues = {
+  admissionNo: string;
+  academicYearId: string;
+  aadhaarNo: string;
+  fullName: string;
+  dob: string;
+  placeOfBirth: string;
+  gender: string;
+  bloodGroup: string;
+  religion: string;
+  caste: string;
+  subCaste: string;
+  category: string;
+  permanentAddress: string;
+  currentAddress: string;
+  phone: string;
+  email: string;
+  admissionDate: string;
+  admissionClassId: string;
+  previousSchool: string;
+  previousClass: string;
+  previousBoard: string;
+  satsId: string;
+  relations: Relation[];
+};
 
 const StudentForm = () => {
-  const { control, register, handleSubmit, reset } = useForm<StudentFormValues>({
-    defaultValues: { relations: [{ name: "", contact: "", occupation: "", email: "", relation: "", otherRelation: "" }] },
+  const { control, register, handleSubmit, reset } =
+    useForm<StudentFormValues>({
+      defaultValues: {
+        relations: [
+          {
+            name: "",
+            contact: "",
+            occupation: "",
+            email: "",
+            relation: "",
+            otherRelation: "",
+          },
+        ],
+      },
+    });
+
+  const { fields, append, remove } = useFieldArray({
+    control,
+    name: "relations",
   });
 
-  const { fields, append, remove } = useFieldArray({ control, name: "relations" });
-
+  // ================= SUBMIT HANDLER (UNCHANGED) =================
   const onSubmit = async (values: StudentFormValues) => {
     try {
-      console.log("🔥 SUBMIT CLICKED", values);
       const token = localStorage.getItem("authToken");
-      if (!token) return toast.error("Token missing. Please login again.");
+      if (!token) {
+        toast.error("Token missing. Please login again.");
+        return;
+      }
 
       const payload = {
         admissionNo: values.admissionNo,
@@ -48,96 +105,133 @@ const StudentForm = () => {
 
       const response = await fetch("/api/1/students/registerStudent", {
         method: "POST",
-        headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
         body: JSON.stringify(payload),
       });
 
       const data = await response.json();
-      if (!response.ok) throw new Error(data.message || "Student registration failed");
+      if (!response.ok) throw new Error(data.message);
 
       toast.success("🎉 Student registered successfully");
       reset();
     } catch (error) {
-      toast.error(error instanceof Error ? error.message : "An error occurred");
+      toast.error(error instanceof Error ? error.message : "Error occurred");
     }
   };
 
+  // ================= UI =================
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="max-w-xl mx-auto p-4 space-y-6">
-      
-      {/* 1️⃣ Student Basic Details */}
-      <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
-        <h2 className="font-poppins font-semibold text-lg">Student Information</h2>
-        <input {...register("admissionNo")} placeholder="Admission No" readOnly className="input-field" />
-        <input {...register("academicYearId")} placeholder="Academic Year" className="input-field" />
-        <input type="date" {...register("admissionDate")} className="input-field" />
-        <input {...register("admissionClassId")} placeholder="Admission Class ID" className="input-field" />
-      </div>
+    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-6xl">
 
-      {/* 2️⃣ Personal Details */}
-      <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
-        <h2 className="font-poppins font-semibold text-lg">Personal Details</h2>
-        <input {...register("fullName")} placeholder="Full Name" className="input-field" />
-        <input type="date" {...register("dob")} className="input-field" />
-        <input {...register("placeOfBirth")} placeholder="Place of Birth" className="input-field" />
-        <select {...register("gender")} className="input-field">
-          <option value="">Select Gender</option>
-          <option value="MALE">Male</option>
-          <option value="FEMALE">Female</option>
-        </select>
-        <input {...register("bloodGroup")} placeholder="Blood Group" className="input-field" />
-        <input {...register("aadhaarNo")} placeholder="XXXX XXXX 9012" className="input-field" />
-      </div>
-
-      {/* 3️⃣ Social & Category Details */}
-      <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
-        <h2 className="font-poppins font-semibold text-lg">Community Information</h2>
-        <input {...register("religion")} placeholder="Religion" className="input-field" />
-        <input {...register("caste")} placeholder="Caste" className="input-field" />
-        <input {...register("subCaste")} placeholder="Sub-Caste" className="input-field" />
-        <input {...register("category")} placeholder="Category" className="input-field" />
-      </div>
-
-      {/* 4️⃣ Contact & Address */}
-      <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
-        <h2 className="font-poppins font-semibold text-lg">Contact Information</h2>
-        <input {...register("phone")} placeholder="Phone" className="input-field" />
-        <input {...register("email")} placeholder="Email" className="input-field" />
-        <textarea {...register("permanentAddress")} placeholder="Permanent Address" className="input-field" />
-        <textarea {...register("currentAddress")} placeholder="Current Address" className="input-field" />
-      </div>
-
-      {/* 5️⃣ Previous Academic Details */}
-      <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
-        <h2 className="font-poppins font-semibold text-lg">Previous School Details</h2>
-        <input {...register("previousSchool")} placeholder="Previous School" className="input-field" />
-        <input {...register("previousClass")} placeholder="Previous Class" className="input-field" />
-        <input {...register("previousBoard")} placeholder="Previous Board" className="input-field" />
-        <input {...register("satsId")} placeholder="SATS ID" className="input-field" />
-      </div>
-
-      {/* 6️⃣ Guardian Details */}
-      <div className="bg-white p-4 rounded-lg shadow-md space-y-3">
-        <h2 className="font-poppins font-semibold text-lg">Guardian Details</h2>
-        {fields.map((field, index) => (
-          <div key={field.id} className="border border-gray-200 p-3 rounded-md space-y-2">
-            <input {...register(`relations.${index}.name`)} placeholder="Name" className="input-field" />
-            <input {...register(`relations.${index}.contact`)} placeholder="Phone" className="input-field" />
-            <input {...register(`relations.${index}.occupation`)} placeholder="Occupation" className="input-field" />
-            <input {...register(`relations.${index}.email`)} placeholder="Email" className="input-field" />
-            <input {...register(`relations.${index}.relation`)} placeholder="Relation" className="input-field" />
-            <input {...register(`relations.${index}.otherRelation`)} placeholder="Other Relation" className="input-field" />
-            <button type="button" onClick={() => remove(index)} className="btn-red">❌ Remove</button>
+      {/* Admission Details */}
+      <Card className="glass-card">
+        <CardContent className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Admission Details</h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Input {...register("admissionNo")} placeholder="Admission No" />
+            <Input {...register("academicYearId")} placeholder="Academic Year ID" />
+            <Input type="date" {...register("admissionDate")} />
+            <Input {...register("admissionClassId")} placeholder="Admission Class ID" />
           </div>
-        ))}
-        <button type="button" onClick={() => append({ name: "", contact: "", occupation: "", email: "", relation: "", otherRelation: "" })} className="btn-blue">
-          ➕ Add Guardian
-        </button>
-      </div>
+        </CardContent>
+      </Card>
+
+      {/* Personal Info */}
+      <Card className="glass-card">
+        <CardContent className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Personal Information</h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Input {...register("fullName")} placeholder="Full Name" />
+            <Input type="date" {...register("dob")} />
+            <Input {...register("gender")} placeholder="Gender" />
+            <Input {...register("bloodGroup")} placeholder="Blood Group" />
+            <Input {...register("aadhaarNo")} placeholder="Aadhaar No" />
+            <Input {...register("religion")} placeholder="Religion" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Contact & Address */}
+      <Card className="glass-card">
+        <CardContent className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Contact & Address</h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Input {...register("phone")} placeholder="Phone" />
+            <Input {...register("email")} placeholder="Email" />
+          </div>
+          <Textarea {...register("permanentAddress")} placeholder="Permanent Address" />
+          <Textarea {...register("currentAddress")} placeholder="Current Address" />
+        </CardContent>
+      </Card>
+
+      {/* Academic History */}
+      <Card className="glass-card">
+        <CardContent className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Academic History</h2>
+          <div className="grid md:grid-cols-2 gap-4">
+            <Input {...register("previousSchool")} placeholder="Previous School" />
+            <Input {...register("previousClass")} placeholder="Previous Class" />
+            <Input {...register("previousBoard")} placeholder="Previous Board" />
+            <Input {...register("satsId")} placeholder="SATS ID" />
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Guardians */}
+      <Card className="glass-card">
+        <CardContent className="p-6 space-y-4">
+          <h2 className="text-lg font-semibold">Guardians</h2>
+
+          {fields.map((field, index) => (
+            <Card key={field.id} className="border">
+              <CardContent className="p-4 space-y-3">
+                <div className="grid md:grid-cols-2 gap-3">
+                  <Input {...register(`relations.${index}.name`)} placeholder="Name" />
+                  <Input {...register(`relations.${index}.contact`)} placeholder="Phone" />
+                  <Input {...register(`relations.${index}.occupation`)} placeholder="Occupation" />
+                  <Input {...register(`relations.${index}.email`)} placeholder="Email" />
+                  <Input {...register(`relations.${index}.relation`)} placeholder="Relation" />
+                </div>
+
+                <Button
+                  type="button"
+                  variant="destructive"
+                  size="sm"
+                  onClick={() => remove(index)}
+                >
+                  Remove Guardian
+                </Button>
+              </CardContent>
+            </Card>
+          ))}
+
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() =>
+              append({
+                name: "",
+                contact: "",
+                occupation: "",
+                email: "",
+                relation: "",
+                otherRelation: "",
+              })
+            }
+          >
+            ➕ Add Guardian
+          </Button>
+        </CardContent>
+      </Card>
 
       {/* Submit */}
-      <div className="flex gap-3 mt-4">
-        <button type="submit" className="btn-green">✅ Submit Student</button>
+      <div className="flex justify-end">
+        <Button type="submit" className="px-8">
+          Register Student
+        </Button>
       </div>
     </form>
   );
