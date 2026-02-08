@@ -1,0 +1,8 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/(.*)",
+      "destination": "https://my-school-pwjd.onrender.com/api/$1"
+    }
+  ]
+}
