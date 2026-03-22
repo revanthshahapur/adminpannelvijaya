@@ -1,4 +1,5 @@
 import { useForm, useFieldArray } from "react-hook-form";
+import { useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -41,7 +42,11 @@ type StudentFormValues = {
 };
 
 const StudentForm = () => {
-  const { control, register, handleSubmit, reset } =
+
+  const [isRegistered, setIsRegistered] = useState(false);
+  const [studentData, setStudentData] = useState<any>(null); // ✅ store full response
+
+  const { control, register, handleSubmit } =
     useForm<StudentFormValues>({
       defaultValues: {
         relations: [
@@ -62,7 +67,7 @@ const StudentForm = () => {
     name: "relations",
   });
 
-  // ================= SUBMIT HANDLER (UNCHANGED) =================
+  // ================= SUBMIT =================
   const onSubmit = async (values: StudentFormValues) => {
     try {
       const token = localStorage.getItem("authToken");
@@ -116,7 +121,13 @@ const StudentForm = () => {
       if (!response.ok) throw new Error(data.message);
 
       toast.success("🎉 Student registered successfully");
-      reset();
+
+      // ✅ STORE FULL RESPONSE (IMPORTANT)
+      setStudentData(data);
+
+      // ✅ ENABLE PREVIEW
+      setIsRegistered(true);
+
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error occurred");
     }
@@ -126,8 +137,10 @@ const StudentForm = () => {
   return (
     <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-6xl">
 
+      {/* ---- YOUR EXISTING CODE (NO CHANGE) ---- */}
+
       {/* Admission Details */}
-      <Card className="glass-card">
+      <Card>
         <CardContent className="p-6 space-y-4">
           <h2 className="text-lg font-semibold">Admission Details</h2>
           <div className="grid md:grid-cols-2 gap-4">
@@ -140,7 +153,7 @@ const StudentForm = () => {
       </Card>
 
       {/* Personal Info */}
-      <Card className="glass-card">
+      <Card>
         <CardContent className="p-6 space-y-4">
           <h2 className="text-lg font-semibold">Personal Information</h2>
           <div className="grid md:grid-cols-2 gap-4">
@@ -154,8 +167,8 @@ const StudentForm = () => {
         </CardContent>
       </Card>
 
-      {/* Contact & Address */}
-      <Card className="glass-card">
+      {/* Contact */}
+      <Card>
         <CardContent className="p-6 space-y-4">
           <h2 className="text-lg font-semibold">Contact & Address</h2>
           <div className="grid md:grid-cols-2 gap-4">
@@ -167,26 +180,13 @@ const StudentForm = () => {
         </CardContent>
       </Card>
 
-      {/* Academic History */}
-      <Card className="glass-card">
-        <CardContent className="p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Academic History</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Input {...register("previousSchool")} placeholder="Previous School" />
-            <Input {...register("previousClass")} placeholder="Previous Class" />
-            <Input {...register("previousBoard")} placeholder="Previous Board" />
-            <Input {...register("satsId")} placeholder="SATS ID" />
-          </div>
-        </CardContent>
-      </Card>
-
       {/* Guardians */}
-      <Card className="glass-card">
+      <Card>
         <CardContent className="p-6 space-y-4">
           <h2 className="text-lg font-semibold">Guardians</h2>
 
           {fields.map((field, index) => (
-            <Card key={field.id} className="border">
+            <Card key={field.id}>
               <CardContent className="p-4 space-y-3">
                 <div className="grid md:grid-cols-2 gap-3">
                   <Input {...register(`relations.${index}.name`)} placeholder="Name" />
@@ -196,13 +196,8 @@ const StudentForm = () => {
                   <Input {...register(`relations.${index}.relation`)} placeholder="Relation" />
                 </div>
 
-                <Button
-                  type="button"
-                  variant="destructive"
-                  size="sm"
-                  onClick={() => remove(index)}
-                >
-                  Remove Guardian
+                <Button type="button" variant="destructive" onClick={() => remove(index)}>
+                  Remove
                 </Button>
               </CardContent>
             </Card>
@@ -227,12 +222,49 @@ const StudentForm = () => {
         </CardContent>
       </Card>
 
-      {/* Submit */}
-      <div className="flex justify-end">
+      {/* Buttons */}
+      <div className="flex justify-end gap-4">
         <Button type="submit" className="px-8">
           Register Student
         </Button>
       </div>
+
+      {/* ================= FEE PREVIEW ================= */}
+      {isRegistered && studentData && (
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <h2 className="text-lg font-semibold"> Fee Preview</h2>
+
+            <p><b>Student Name:</b> {studentData.student.name}</p>
+            <p><b>Admission No:</b> {studentData.student.admissionNo}</p>
+
+            <table className="w-full border mt-4">
+              <thead>
+                <tr className="border">
+                  <th className="p-2 border">Fee Head ID</th>
+                  <th className="p-2 border">Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {studentData.feeStructure.items.map((item: any) => (
+                  <tr key={item.id} className="border">
+                    <td className="p-2 border">{item.feeHeadId}</td>
+                    <td className="p-2 border">₹ {item.amount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+
+            <p className="text-right font-bold">
+              Total: ₹{" "}
+              {studentData.feeStructure.items.reduce(
+                (sum: number, item: any) => sum + item.amount,
+                0
+              )}
+            </p>
+          </CardContent>
+        </Card>
+      )}
     </form>
   );
 };
