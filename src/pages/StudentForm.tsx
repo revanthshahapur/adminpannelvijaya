@@ -42,9 +42,12 @@ type StudentFormValues = {
 };
 
 const StudentForm = () => {
-
   const [isRegistered, setIsRegistered] = useState(false);
-  const [studentData, setStudentData] = useState<any>(null); // ✅ store full response
+  const [studentData, setStudentData] = useState<any>(null);
+
+  // ✅ NEW STATES (per item discount)
+  const [discounts, setDiscounts] = useState<{ [key: number]: number }>({});
+  const [activeDiscount, setActiveDiscount] = useState<number | null>(null);
 
   const { control, register, handleSubmit } =
     useForm<StudentFormValues>({
@@ -75,6 +78,7 @@ const StudentForm = () => {
         toast.error("Token missing. Please login again.");
         return;
       }
+
 
       const payload = {
         admissionNo: values.admissionNo,
@@ -122,150 +126,305 @@ const StudentForm = () => {
 
       toast.success("🎉 Student registered successfully");
 
-      // ✅ STORE FULL RESPONSE (IMPORTANT)
       setStudentData(data);
-
-      // ✅ ENABLE PREVIEW
       setIsRegistered(true);
-
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error occurred");
     }
   };
 
+//
+//  fee submit handler
+const handleFeeSubmit = async () => {
+  try {
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      toast.error("Token missing");
+      return;
+    }
+
+    if (!studentData) return;
+
+    const overallPercent =
+      totalAmount > 0 ? (totalDiscount / totalAmount) * 100 : 0;
+
+    const payload = {
+      schoolId: studentData.student.schoolId,
+      studentId: studentData.student.id,
+      enrollmentId: studentData.student.admissionClassId, // confirm if correct
+      academicYearId: studentData.feeStructure.academicYearId,
+      feeStructureId: studentData.feeStructure.id,
+      discountPercentage: parseFloat(overallPercent.toFixed(2)),
+    };
+
+    const response = await fetch(
+      "https://my-school-pwjd.onrender.com/api/student-fees-accounts",
+      {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify(payload),
+      }
+    );
+
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message);
+
+    toast.success("✅ Fee submitted successfully");
+  } catch (error) {
+    toast.error(error instanceof Error ? error.message : "Submit failed");
+  }
+};
+//----
+
+
+
+
+
+
+  // ================= CALCULATIONS =================
+  const totalAmount = studentData
+    ? studentData.feeStructure.items.reduce(
+        (sum: number, item: any) => sum + item.amount,
+        0
+      )
+    : 0;
+
+  const totalDiscount = studentData
+    ? studentData.feeStructure.items.reduce((sum: number, item: any) => {
+        const percent = discounts[item.feeHeadId] || 0;
+        return sum + (item.amount * percent) / 100;
+      }, 0)
+    : 0;
+
+  const finalAmount = totalAmount - totalDiscount;
+
+  // ================= HANDLE ITEM DISCOUNT =================
+  const handleItemDiscount = (feeHeadId: number, value: string, max: number) => {
+    let percent = parseFloat(value);
+
+    if (isNaN(percent)) percent = 0;
+    if (percent > max) percent = max;
+
+    setDiscounts((prev) => ({
+      ...prev,
+      [feeHeadId]: percent,
+    }));
+  };
+
   // ================= UI =================
   return (
-    <form onSubmit={handleSubmit(onSubmit)} className="space-y-6 max-w-6xl">
+    <div className="flex gap-6 max-w-7xl mx-auto">
+      {/* ---- LEFT: Form ---- */}
+      <form
+        onSubmit={handleSubmit(onSubmit)}
+        className={`space-y-6 transition-all duration-500 ${
+          isRegistered ? "w-1/2" : "w-full"
+        }`}
+      >
+        {/* (NO CHANGE LEFT SIDE) */}
 
-      {/* ---- YOUR EXISTING CODE (NO CHANGE) ---- */}
-
-      {/* Admission Details */}
-      <Card>
-        <CardContent className="p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Admission Details</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Input {...register("admissionNo")} placeholder="Admission No" />
-            <Input {...register("academicYearId")} placeholder="Academic Year ID" />
-            <Input type="date" {...register("admissionDate")} />
-            <Input {...register("admissionClassId")} placeholder="Admission Class ID" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Personal Info */}
-      <Card>
-        <CardContent className="p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Personal Information</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Input {...register("fullName")} placeholder="Full Name" />
-            <Input type="date" {...register("dob")} />
-            <Input {...register("gender")} placeholder="Gender" />
-            <Input {...register("bloodGroup")} placeholder="Blood Group" />
-            <Input {...register("aadhaarNo")} placeholder="Aadhaar No" />
-            <Input {...register("religion")} placeholder="Religion" />
-          </div>
-        </CardContent>
-      </Card>
-
-      {/* Contact */}
-      <Card>
-        <CardContent className="p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Contact & Address</h2>
-          <div className="grid md:grid-cols-2 gap-4">
-            <Input {...register("phone")} placeholder="Phone" />
-            <Input {...register("email")} placeholder="Email" />
-          </div>
-          <Textarea {...register("permanentAddress")} placeholder="Permanent Address" />
-          <Textarea {...register("currentAddress")} placeholder="Current Address" />
-        </CardContent>
-      </Card>
-
-      {/* Guardians */}
-      <Card>
-        <CardContent className="p-6 space-y-4">
-          <h2 className="text-lg font-semibold">Guardians</h2>
-
-          {fields.map((field, index) => (
-            <Card key={field.id}>
-              <CardContent className="p-4 space-y-3">
-                <div className="grid md:grid-cols-2 gap-3">
-                  <Input {...register(`relations.${index}.name`)} placeholder="Name" />
-                  <Input {...register(`relations.${index}.contact`)} placeholder="Phone" />
-                  <Input {...register(`relations.${index}.occupation`)} placeholder="Occupation" />
-                  <Input {...register(`relations.${index}.email`)} placeholder="Email" />
-                  <Input {...register(`relations.${index}.relation`)} placeholder="Relation" />
-                </div>
-
-                <Button type="button" variant="destructive" onClick={() => remove(index)}>
-                  Remove
-                </Button>
-              </CardContent>
-            </Card>
-          ))}
-
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() =>
-              append({
-                name: "",
-                contact: "",
-                occupation: "",
-                email: "",
-                relation: "",
-                otherRelation: "",
-              })
-            }
-          >
-            ➕ Add Guardian
-          </Button>
-        </CardContent>
-      </Card>
-
-      {/* Buttons */}
-      <div className="flex justify-end gap-4">
-        <Button type="submit" className="px-8">
-          Register Student
-        </Button>
-      </div>
-
-      {/* ================= FEE PREVIEW ================= */}
-      {isRegistered && studentData && (
+        {/* Admission Details */}
         <Card>
           <CardContent className="p-6 space-y-4">
-            <h2 className="text-lg font-semibold"> Fee Preview</h2>
-
-            <p><b>Student Name:</b> {studentData.student.name}</p>
-            <p><b>Admission No:</b> {studentData.student.admissionNo}</p>
-
-            <table className="w-full border mt-4">
-              <thead>
-                <tr className="border">
-                  <th className="p-2 border">Fee Head ID</th>
-                  <th className="p-2 border">Amount</th>
-                </tr>
-              </thead>
-              <tbody>
-                {studentData.feeStructure.items.map((item: any) => (
-                  <tr key={item.id} className="border">
-                    <td className="p-2 border">{item.feeHeadId}</td>
-                    <td className="p-2 border">₹ {item.amount}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-
-            <p className="text-right font-bold">
-              Total: ₹{" "}
-              {studentData.feeStructure.items.reduce(
-                (sum: number, item: any) => sum + item.amount,
-                0
-              )}
-            </p>
+            <h2 className="text-lg font-semibold">Admission Details</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <Input {...register("admissionNo")} placeholder="Admission No" />
+              <Input {...register("academicYearId")} placeholder="Academic Year ID" />
+              <Input type="date" {...register("admissionDate")} />
+              <Input {...register("admissionClassId")} placeholder="Admission Class ID" />
+            </div>
           </CardContent>
         </Card>
-      )}
-    </form>
+
+        {/* Personal Info */}
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <h2 className="text-lg font-semibold">Personal Information</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <Input {...register("fullName")} placeholder="Full Name" />
+              <Input type="date" {...register("dob")} />
+              <Input {...register("gender")} placeholder="Gender" />
+              <Input {...register("bloodGroup")} placeholder="Blood Group" />
+              <Input {...register("aadhaarNo")} placeholder="Aadhaar No" />
+              <Input {...register("religion")} placeholder="Religion" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Contact */}
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <h2 className="text-lg font-semibold">Contact & Address</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <Input {...register("phone")} placeholder="Phone" />
+              <Input {...register("email")} placeholder="Email" />
+            </div>
+            <Textarea {...register("permanentAddress")} placeholder="Permanent Address" />
+            <Textarea {...register("currentAddress")} placeholder="Current Address" />
+          </CardContent>
+        </Card>
+
+        {/* Guardians */}
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <h2 className="text-lg font-semibold">Guardians</h2>
+            {fields.map((field, index) => (
+              <Card key={field.id}>
+                <CardContent className="p-4 space-y-3">
+                  <div className="grid md:grid-cols-2 gap-3">
+                    <Input {...register(`relations.${index}.name`)} placeholder="Name" />
+                    <Input {...register(`relations.${index}.contact`)} placeholder="Phone" />
+                    <Input {...register(`relations.${index}.occupation`)} placeholder="Occupation" />
+                    <Input {...register(`relations.${index}.email`)} placeholder="Email" />
+                    <Input {...register(`relations.${index}.relation`)} placeholder="Relation" />
+                  </div>
+
+                  <Button type="button" variant="destructive" onClick={() => remove(index)}>
+                    Remove
+                  </Button>
+                </CardContent>
+              </Card>
+            ))}
+
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() =>
+                append({
+                  name: "",
+                  contact: "",
+                  occupation: "",
+                  email: "",
+                  relation: "",
+                  otherRelation: "",
+                })
+              }
+            >
+              ➕ Add Guardian
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Submit */}
+        <div className="flex justify-end gap-4">
+          <Button type="submit" className="px-8">
+            Register Student
+          </Button>
+        </div>
+      </form>
+
+      {/* ---- RIGHT: Fee Preview ---- */}
+      {isRegistered && studentData && (
+  <div className="w-1/2 transition-all duration-500">
+    <Card>
+      <CardContent className="p-6 space-y-4">
+        <h2 className="text-lg font-semibold"> Fee Preview</h2>
+
+        <p><b>Student Name:</b> {studentData.student.name}</p>
+        <p><b>Admission No:</b> {studentData.student.admissionNo}</p>
+
+        <table className="w-full border mt-4">
+          <thead>
+            <tr className="border bg-gray-100">
+              <th className="p-2 border">Fee Head</th>
+              <th className="p-2 border">Amount</th>
+              <th className="p-2 border">Discount</th>
+              <th className="p-2 border">Final</th>
+            </tr>
+          </thead>
+
+          <tbody>
+            {studentData.feeStructure.items.map((item: any) => {
+              const percent = discounts[item.feeHeadId] || 0;
+              const discount = (item.amount * percent) / 100;
+              const final = item.amount - discount;
+
+              return (
+                <tr key={item.feeHeadId} className="border hover:bg-gray-50">
+                  <td className="p-2 border">{item.name}</td>
+
+                  <td className="p-2 border relative group cursor-pointer">
+                    ₹ {item.amount}
+                    <div className="absolute hidden group-hover:block bg-black text-white text-xs px-2 py-1 rounded -top-7 left-1/2 -translate-x-1/2">
+                      {item.isDiscountAllowed
+                        ? `Max Discount: ${item.maxDiscountPercentage}%`
+                        : "Discount not applicable for this fee"}
+                    </div>
+                  </td>
+
+                  <td className="p-2 border text-center">
+                    {item.isDiscountAllowed ? (
+                      <>
+                        <span
+                          className="cursor-pointer text-blue-600"
+                          onClick={() =>
+                            setActiveDiscount(
+                              activeDiscount === item.feeHeadId
+                                ? null
+                                : item.feeHeadId
+                            )
+                          }
+                        >
+                          %
+                        </span>
+
+                        {activeDiscount === item.feeHeadId && (
+                          <Input
+                            type="number"
+                            className="w-16 ml-2"
+                            value={percent || ""}
+                            onChange={(e) =>
+                              handleItemDiscount(
+                                item.feeHeadId,
+                                e.target.value,
+                                item.maxDiscountPercentage
+                              )
+                            }
+                          />
+                        )}
+                      </>
+                    ) : (
+                      <span className="text-gray-400">N/A</span>
+                    )}
+                  </td>
+
+                  <td className="p-2 border">₹ {final.toFixed(2)}</td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+
+        <p className="text-right font-bold mt-2">
+          Total: ₹ {totalAmount.toFixed(2)}
+        </p>
+
+        <p className="text-right text-red-500">
+          Discount: ₹ {totalDiscount.toFixed(2)}
+        </p>
+
+        <p className="text-right font-bold text-green-600">
+          Final: ₹ {finalAmount.toFixed(2)}
+        </p>
+
+        {/* ✅ ADD BUTTON HERE */}
+        <div className="flex justify-end mt-4">
+          <Button
+            className="bg-green-600 hover:bg-green-700 text-white px-6"
+            onClick={handleFeeSubmit}
+          >
+            Submit Fee
+          </Button>
+        </div>
+
+      </CardContent>
+    </Card>
+  </div>
+)}
+    </div>
   );
 };
 
