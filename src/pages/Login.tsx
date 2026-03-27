@@ -81,6 +81,20 @@ const Login = () => {
         localStorage.setItem('userRoles', JSON.stringify(data.roles || []));
 
         // ============================
+        // STORE SCHOOL ID FOR SESSION WIDE USAGE
+        // ============================
+        const schoolId =
+          data.schoolId ||
+          data.school_id ||
+          data.school?.id ||
+          data.user?.schoolId ||
+          data.user?.school_id;
+
+        if (schoolId) {
+          localStorage.setItem('schoolId', String(schoolId));
+        }
+
+        // ============================
         // UPDATE STORE
         // ============================
         useAppStore.setState({

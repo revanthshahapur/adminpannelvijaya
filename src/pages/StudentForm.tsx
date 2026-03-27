@@ -1,10 +1,17 @@
-import { useForm, useFieldArray } from "react-hook-form";
-import { useState } from "react";
+import { useForm, useFieldArray, Controller } from "react-hook-form";
+import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Relation = {
   name: string;
@@ -48,10 +55,16 @@ const StudentForm = () => {
 
   // ✅ NEW STATES (overall discount only)
   const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [academicYearName, setAcademicYearName] = useState<string>("");
+  const [classes, setClasses] = useState<{ id: number; name: string }[]>([]);
 
-  const { control, register, handleSubmit } =
+  const currentDate = new Date().toISOString().slice(0, 10);
+
+  const { control, register, handleSubmit, setValue } =
     useForm<StudentFormValues>({
       defaultValues: {
+        academicYearId: "",
+        admissionDate: currentDate,
         relations: [
           {
             name: "",
@@ -70,9 +83,127 @@ const StudentForm = () => {
     name: "relations",
   });
 
+  useEffect(() => {
+    const fetchActiveAcademicYear = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          throw new Error("Token missing. Please login again.");
+        }
+
+        let schoolId = localStorage.getItem("schoolId");
+        if (!schoolId) {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser);
+              schoolId =
+                parsedUser.schoolId || parsedUser.school_id ||
+                parsedUser.school?.id || parsedUser.user?.schoolId ||
+                parsedUser.user?.school_id;
+            } catch {
+              // ignore parse errors
+            }
+          }
+        }
+
+        if (!schoolId) {
+          throw new Error("School ID missing. Unable to load active academic year.");
+        }
+
+        const response = await fetch(
+          `/api/utilities/schools/${schoolId}/academic-years/active`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to fetch active academic year");
+        }
+
+        if (!data || !data.id || !data.name) {
+          throw new Error("Active academic year not found");
+        }
+
+        setAcademicYearName(data.name);
+        setValue("academicYearId", String(data.id));
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Active academic year not found");
+      }
+    };
+
+    const fetchClasses = async () => {
+      try {
+        const token = localStorage.getItem("authToken");
+        if (!token) {
+          throw new Error("Token missing. Please login again.");
+        }
+
+        let schoolId = localStorage.getItem("schoolId");
+        if (!schoolId) {
+          const storedUser = localStorage.getItem("user");
+          if (storedUser) {
+            try {
+              const parsedUser = JSON.parse(storedUser);
+              schoolId =
+                parsedUser.schoolId || parsedUser.school_id ||
+                parsedUser.school?.id || parsedUser.user?.schoolId ||
+                parsedUser.user?.school_id;
+            } catch {
+              // ignore parse errors
+            }
+          }
+        }
+
+        if (!schoolId) {
+          throw new Error("School ID missing. Unable to load classes.");
+        }
+
+        const response = await fetch(
+          `/api/utilities/schools/${schoolId}/classes`,
+          {
+            method: "GET",
+            headers: {
+              "Content-Type": "application/json",
+              Authorization: `Bearer ${token}`,
+            },
+          }
+        );
+
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.message || "Failed to fetch classes");
+        }
+
+        if (!Array.isArray(data)) {
+          throw new Error("Invalid classes data format");
+        }
+
+        setClasses(data);
+      } catch (error) {
+        toast.error(error instanceof Error ? error.message : "Failed to load classes");
+      }
+    };
+
+    fetchActiveAcademicYear();
+    fetchClasses();
+  }, [setValue]);
+
   // ================= SUBMIT =================
   const onSubmit = async (values: StudentFormValues) => {
     try {
+      if (!values.academicYearId) {
+        throw new Error("Active academic year not found. Cannot submit student registration.");
+      }
+
       const token = localStorage.getItem("authToken");
       if (!token) {
         toast.error("Token missing. Please login again.");
@@ -128,6 +259,11 @@ const StudentForm = () => {
 
       setStudentData(data);
       setIsRegistered(true);
+
+      // Set the generated admission number in the form
+      if (data.student?.admissionNo) {
+        setValue("admissionNo", data.student.admissionNo);
+      }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error occurred");
     }
@@ -220,10 +356,28 @@ const handleFeeSubmit = async () => {
           <CardContent className="p-6 space-y-4">
             <h2 className="text-lg font-semibold">Admission Details</h2>
             <div className="grid md:grid-cols-2 gap-4">
-              <Input {...register("admissionNo")} placeholder="Admission No" />
-              <Input {...register("academicYearId")} placeholder="Academic Year ID" />
+              <Input {...register("admissionNo")} placeholder="Admission No" readOnly={isRegistered} />
+              <Input value={academicYearName || "Loading academic year..."} readOnly placeholder="Academic Year" />
+              <Input type="hidden" {...register("academicYearId")} />
+              <Controller
+                name="admissionClassId"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Admission Class" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {classes.map((classItem) => (
+                        <SelectItem key={classItem.id} value={String(classItem.id)}>
+                          {classItem.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              />
               <Input type="date" {...register("admissionDate")} />
-              <Input {...register("admissionClassId")} placeholder="Admission Class ID" />
             </div>
           </CardContent>
         </Card>
