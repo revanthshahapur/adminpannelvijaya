@@ -44,10 +44,10 @@ type StudentFormValues = {
 const StudentForm = () => {
   const [isRegistered, setIsRegistered] = useState(false);
   const [studentData, setStudentData] = useState<any>(null);
+  const [isFeeSubmitted, setIsFeeSubmitted] = useState(false);
 
-  // ✅ NEW STATES (per item discount)
-  const [discounts, setDiscounts] = useState<{ [key: number]: number }>({});
-  const [activeDiscount, setActiveDiscount] = useState<number | null>(null);
+  // ✅ NEW STATES (overall discount only)
+  const [discountPercent, setDiscountPercent] = useState<number>(0);
 
   const { control, register, handleSubmit } =
     useForm<StudentFormValues>({
@@ -145,20 +145,17 @@ const handleFeeSubmit = async () => {
 
     if (!studentData) return;
 
-    const overallPercent =
-      totalAmount > 0 ? (totalDiscount / totalAmount) * 100 : 0;
-
     const payload = {
       schoolId: studentData.student.schoolId,
       studentId: studentData.student.id,
       enrollmentId: studentData.student.admissionClassId, // confirm if correct
       academicYearId: studentData.feeStructure.academicYearId,
       feeStructureId: studentData.feeStructure.id,
-      discountPercentage: parseFloat(overallPercent.toFixed(2)),
+      discountPercentage: discountPercent,
     };
 
     const response = await fetch(
-      "https://my-school-pwjd.onrender.com/api/student-fees-accounts",
+      "/api/student-fees-accounts/registerStudentFeeAccount",
       {
         method: "POST",
         headers: {
@@ -173,6 +170,7 @@ const handleFeeSubmit = async () => {
     if (!response.ok) throw new Error(data.message);
 
     toast.success("✅ Fee submitted successfully");
+    setIsFeeSubmitted(true);
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "Submit failed");
   }
@@ -194,25 +192,16 @@ const handleFeeSubmit = async () => {
 
   const totalDiscount = studentData
     ? studentData.feeStructure.items.reduce((sum: number, item: any) => {
-        const percent = discounts[item.feeHeadId] || 0;
-        return sum + (item.amount * percent) / 100;
+        if (item.isDiscountAllowed) {
+          return sum + (item.amount * discountPercent) / 100;
+        }
+        return sum;
       }, 0)
     : 0;
 
   const finalAmount = totalAmount - totalDiscount;
 
-  // ================= HANDLE ITEM DISCOUNT =================
-  const handleItemDiscount = (feeHeadId: number, value: string, max: number) => {
-    let percent = parseFloat(value);
 
-    if (isNaN(percent)) percent = 0;
-    if (percent > max) percent = max;
-
-    setDiscounts((prev) => ({
-      ...prev,
-      [feeHeadId]: percent,
-    }));
-  };
 
   // ================= UI =================
   return (
@@ -338,8 +327,7 @@ const handleFeeSubmit = async () => {
 
           <tbody>
             {studentData.feeStructure.items.map((item: any) => {
-              const percent = discounts[item.feeHeadId] || 0;
-              const discount = (item.amount * percent) / 100;
+              const discount = item.isDiscountAllowed ? (item.amount * discountPercent) / 100 : 0;
               const final = item.amount - discount;
 
               return (
@@ -356,39 +344,7 @@ const handleFeeSubmit = async () => {
                   </td>
 
                   <td className="p-2 border text-center">
-                    {item.isDiscountAllowed ? (
-                      <>
-                        <span
-                          className="cursor-pointer text-blue-600"
-                          onClick={() =>
-                            setActiveDiscount(
-                              activeDiscount === item.feeHeadId
-                                ? null
-                                : item.feeHeadId
-                            )
-                          }
-                        >
-                          %
-                        </span>
-
-                        {activeDiscount === item.feeHeadId && (
-                          <Input
-                            type="number"
-                            className="w-16 ml-2"
-                            value={percent || ""}
-                            onChange={(e) =>
-                              handleItemDiscount(
-                                item.feeHeadId,
-                                e.target.value,
-                                item.maxDiscountPercentage
-                              )
-                            }
-                          />
-                        )}
-                      </>
-                    ) : (
-                      <span className="text-gray-400">N/A</span>
-                    )}
+                    ₹ {discount.toFixed(2)}
                   </td>
 
                   <td className="p-2 border">₹ {final.toFixed(2)}</td>
@@ -401,6 +357,22 @@ const handleFeeSubmit = async () => {
         <p className="text-right font-bold mt-2">
           Total: ₹ {totalAmount.toFixed(2)}
         </p>
+
+        <div className="text-right text-red-500 flex items-center justify-end gap-3">
+          <span>Discount %</span>
+          <Input
+            type="number"
+            min={0}
+            max={100}
+            step={0.01}
+            className="w-24"
+            value={discountPercent}
+            onChange={(e) => {
+              const val = parseFloat(e.target.value);
+              setDiscountPercent(isNaN(val) ? 0 : Math.min(Math.max(val, 0), 100));
+            }}
+          />
+        </div>
 
         <p className="text-right text-red-500">
           Discount: ₹ {totalDiscount.toFixed(2)}
@@ -415,8 +387,9 @@ const handleFeeSubmit = async () => {
           <Button
             className="bg-green-600 hover:bg-green-700 text-white px-6"
             onClick={handleFeeSubmit}
+            disabled={isFeeSubmitted}
           >
-            Submit Fee
+            {isFeeSubmitted ? "Fee Finalised" : "Finalise Fee"}
           </Button>
         </div>
 

@@ -12,7 +12,7 @@ import loginBackground from '@/assets/login.webp';
 // ============================================================================
 // API CONFIGURATION
 // ============================================================================
-const API_BASE_URL = 'https://my-school-pwjd.onrender.com/api/auth/signin';
+const API_BASE_URL = '/api/auth/signin';
 
 const Login = () => {
   const [username, setUsername] = useState('');
