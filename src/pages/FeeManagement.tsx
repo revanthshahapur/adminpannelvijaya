@@ -2,7 +2,7 @@ import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Search, Printer } from "lucide-react";
+import { Search } from "lucide-react";
 
 const dummyStudents = [
   {
@@ -11,10 +11,10 @@ const dummyStudents = [
     class: "10",
     section: "A",
     feeStructure: [
-      { feeHead: "Tuition Fee", amount: 20000 },
-      { feeHead: "Stationary", amount: 3000 },
-      { feeHead: "Transport", amount: 5000 },
-      { feeHead: "Uniform", amount: 2000 },
+      { feeHead: "Tuition Fee", amount: 20000, discount: 10 },
+      { feeHead: "Stationary", amount: 3000, discount: 5 },
+      { feeHead: "Transport", amount: 5000, discount: 0 },
+      { feeHead: "Uniform", amount: 2000, discount: 0 },
     ],
   },
 ];
@@ -25,39 +25,46 @@ const FeeManagement = () => {
   const [search, setSearch] = useState("");
   const [student, setStudent] = useState<any>(null);
 
-  const [rowDiscounts, setRowDiscounts] = useState<any>({});
   const [rowPayments, setRowPayments] = useState<any>({});
-  const [rowModes, setRowModes] = useState<any>({});
-
   const [payments, setPayments] = useState<any[]>([]);
+
+  const [transactionNo, setTransactionNo] = useState("");
+  const [paymentMode, setPaymentMode] = useState("Cash");
+
+  const [selectedReceipt, setSelectedReceipt] = useState<any>(null);
 
   const handleSearch = () => {
     const found = dummyStudents.find((s) =>
       s.name.toLowerCase().includes(search.toLowerCase())
     );
     setStudent(found || null);
-
-    setRowDiscounts({});
     setRowPayments({});
-    setRowModes({});
+  };
+
+  const getFinal = (f: any) => {
+    const discountAmt = (f.amount * f.discount) / 100;
+    return f.amount - discountAmt;
+  };
+
+  const getPaid = (feeHead: string) => {
+    return payments
+      .filter((p) => p.feeHead === feeHead)
+      .reduce((sum, p) => sum + p.amount, 0);
   };
 
   const handleConfirmPayment = () => {
+    if (!student) return;
     const newPayments: any[] = [];
 
     student.feeStructure.forEach((f: any, i: number) => {
       const pay = rowPayments[i] || 0;
-
       if (pay > 0) {
         newPayments.push({
           id: Date.now() + i,
           feeHead: f.feeHead,
           amount: pay,
-          mode: rowModes[i] || "Cash",
-
-          // ✅ AUTO GENERATED
-          transactionNo: "TXN" + Date.now() + i,
-
+          mode: paymentMode,
+          transactionNo,
           date: new Date().toLocaleDateString(),
           receiptNo: "RCPT" + Math.floor(Math.random() * 100000),
         });
@@ -65,8 +72,8 @@ const FeeManagement = () => {
     });
 
     setPayments([...payments, ...newPayments]);
-
     setRowPayments({});
+    setTransactionNo("");
   };
 
   return (
@@ -106,7 +113,7 @@ const FeeManagement = () => {
             </CardContent>
           </Card>
 
-          {/* 📊 MAIN TABLE */}
+          {/* 📊 Fee Table */}
           <Card>
             <CardContent className="p-4 overflow-x-auto">
               <table className="w-full border text-sm">
@@ -114,59 +121,33 @@ const FeeManagement = () => {
                   <tr className="bg-gray-100">
                     <th className="border p-2">Fee Head</th>
                     <th className="border p-2">Amount</th>
-                    <th className="border p-2">Discount %</th>
+                    <th className="border p-2">Discount</th>
                     <th className="border p-2">Final</th>
                     <th className="border p-2">Paid</th>
                     <th className="border p-2">Due</th>
                     <th className="border p-2">Paying</th>
-                    <th className="border p-2">Mode</th>
-                    <th className="border p-2">Transaction No</th>
                   </tr>
                 </thead>
-
                 <tbody>
                   {student.feeStructure.map((f: any, i: number) => {
-                    const discount = rowDiscounts[i] || 0;
-                    const disAmt = (f.amount * discount) / 100;
-                    const final = f.amount - disAmt;
-
-                    const paid = payments
-                      .filter((p) => p.feeHead === f.feeHead)
-                      .reduce((sum, p) => sum + p.amount, 0);
-
+                    const final = getFinal(f);
+                    const paid = getPaid(f.feeHead);
                     const due = final - paid;
+                    const paying = rowPayments[i] || 0;
+                    const updatedDue = due - paying;
 
                     return (
                       <tr key={i}>
                         <td className="border p-2">{f.feeHead}</td>
-
                         <td className="border p-2">₹ {f.amount}</td>
-
-                        <td className="border p-2">
-                          <Input
-                            type="number"
-                            className="w-16"
-                            value={discount}
-                            onChange={(e) =>
-                              setRowDiscounts({
-                                ...rowDiscounts,
-                                [i]: Number(e.target.value),
-                              })
-                            }
-                          />
-                        </td>
-
+                        <td className="border p-2">{f.discount}%</td>
                         <td className="border p-2">₹ {final}</td>
-
                         <td className="border p-2">₹ {paid}</td>
-
-                        <td className="border p-2 text-red-600">₹ {due}</td>
-
+                        <td className="border p-2 text-red-600">₹ {updatedDue}</td>
                         <td className="border p-2">
                           <Input
                             type="number"
-                            className="w-20"
-                            value={rowPayments[i] || ""}
+                            value={paying}
                             onChange={(e) =>
                               setRowPayments({
                                 ...rowPayments,
@@ -175,40 +156,51 @@ const FeeManagement = () => {
                             }
                           />
                         </td>
-
-                        <td className="border p-2">
-                          <select
-                            className="border p-1 rounded"
-                            value={rowModes[i] || "Cash"}
-                            onChange={(e) =>
-                              setRowModes({
-                                ...rowModes,
-                                [i]: e.target.value,
-                              })
-                            }
-                          >
-                            {paymentModes.map((m) => (
-                              <option key={m}>{m}</option>
-                            ))}
-                          </select>
-                        </td>
-
-                        {/* ✅ Auto transaction */}
-                        <td className="border p-2 text-gray-400 text-xs">
-                          Auto
-                        </td>
                       </tr>
                     );
                   })}
                 </tbody>
               </table>
+            </CardContent>
+          </Card>
 
-              {/* ✅ Confirm Button */}
-              <div className="flex justify-end mt-4">
-                <Button
-                  className="bg-green-600 hover:bg-green-700"
-                  onClick={handleConfirmPayment}
+          {/*  Summary + Payment */}
+          <Card>
+            <CardContent className="p-4 space-y-4">
+
+              <div className="grid grid-cols-3 gap-4 text-sm">
+                <p><b>Total Amount:</b> ₹ {student.feeStructure.reduce((sum: number, f: any) => sum + getFinal(f), 0)}</p>
+                <p><b>Total Paying:</b> ₹ {Object.values(rowPayments).reduce((sum: any, v: any) => sum + v, 0)}</p>
+                <p className="text-red-600">
+                  <b>Total Due:</b> ₹ {student.feeStructure.reduce((sum: number, f: any, i: number) => {
+                    const final = getFinal(f);
+                    const paid = getPaid(f.feeHead);
+                    const paying = rowPayments[i] || 0;
+                    return sum + (final - paid - paying);
+                  }, 0)}
+                </p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <Input
+                  placeholder="Transaction Number"
+                  value={transactionNo}
+                  onChange={(e) => setTransactionNo(e.target.value)}
+                />
+
+                <select
+                  className="border p-2 rounded"
+                  value={paymentMode}
+                  onChange={(e) => setPaymentMode(e.target.value)}
                 >
+                  {paymentModes.map((m) => (
+                    <option key={m}>{m}</option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex justify-end">
+                <Button className="bg-green-600 hover:bg-green-700" onClick={handleConfirmPayment}>
                    Confirm Payment
                 </Button>
               </div>
@@ -220,30 +212,24 @@ const FeeManagement = () => {
             <CardContent className="p-4">
               <h2 className="font-semibold mb-3">Payment History</h2>
 
-              <table className="w-full border text-xs">
+              <table className="w-full border text-sm">
                 <thead>
                   <tr className="bg-gray-100">
-                    <th className="border p-1">Date</th>
-                    <th className="border p-1">Fee Head</th>
-                    <th className="border p-1">Amount</th>
-                    <th className="border p-1">Mode</th>
-                    <th className="border p-1">Txn</th>
-                    <th className="border p-1">Receipt</th>
-                    <th className="border p-1">Print</th>
+                    <th className="border p-2">Date</th>
+                    <th className="border p-2">Amount Paid</th>
+                    <th className="border p-2">Receipt No</th>
                   </tr>
                 </thead>
-
                 <tbody>
                   {payments.map((p) => (
                     <tr key={p.id}>
-                      <td className="border p-1">{p.date}</td>
-                      <td className="border p-1">{p.feeHead}</td>
-                      <td className="border p-1">₹ {p.amount}</td>
-                      <td className="border p-1">{p.mode}</td>
-                      <td className="border p-1">{p.transactionNo}</td>
-                      <td className="border p-1">{p.receiptNo}</td>
-                      <td className="border p-1 text-center">
-                        <Printer className="w-4 h-4 cursor-pointer" />
+                      <td className="border p-2">{p.date}</td>
+                      <td className="border p-2">₹ {p.amount}</td>
+                      <td
+                        className="border p-2 text-blue-600 cursor-pointer"
+                        onClick={() => setSelectedReceipt(p)}
+                      >
+                        {p.receiptNo}
                       </td>
                     </tr>
                   ))}
@@ -251,6 +237,92 @@ const FeeManagement = () => {
               </table>
             </CardContent>
           </Card>
+
+          {/* 🧾 RECEIPT POPUP */}
+          {selectedReceipt && (
+            <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+              <div className="bg-white w-[700px] p-6 rounded-lg shadow-lg print:w-full print:shadow-none">
+
+                {/* Header */}
+                <div className="text-center border-b pb-3">
+                  <h1 className="text-xl font-bold"></h1>
+                  <p className="text-xs"></p>
+                  <p className="text-xs"></p>
+                  <h2 className="mt-2 font-semibold">Receipt</h2>
+                </div>
+
+                {/* Top Info */}
+                <div className="flex justify-between mt-3 text-sm">
+                  <p><b>Receipt No:</b> {selectedReceipt.receiptNo}</p>
+                  <p><b>Date:</b> {selectedReceipt.date}</p>
+                </div>
+
+                <div className="mt-2 text-sm">
+                  <p><b>Name:</b> {student.name}</p>
+                  <p><b>Class:</b> {student.class} - {student.section}</p>
+                  <p><b>Transaction Mode:</b> {selectedReceipt.mode}</p>
+                  <p><b>Transaction No:</b> {selectedReceipt.transactionNo}</p>
+                </div>
+
+                {/* Fee Table with Payment Particulars */}
+                <table className="w-full border mt-4 text-sm">
+                  <thead>
+                    <tr className="bg-gray-100">
+                      <th className="border p-2 text-center">Sr No</th>
+                      <th className="border p-2">Fee Head</th>
+                      <th className="border p-2">Total Amount</th>
+                      <th className="border p-2">Amount Paid</th>
+                      <th className="border p-2">Balance</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {student.feeStructure.map((f: any, i: number) => {
+                      const final = getFinal(f);
+                      const totalPaid = payments
+                        .filter((p) => p.feeHead === f.feeHead)
+                        .reduce((sum, p) => sum + p.amount, 0);
+                      const currentPaid = selectedReceipt.feeHead === f.feeHead ? selectedReceipt.amount : 0;
+                      const balance = final - totalPaid;
+                      return (
+                        <tr key={i}>
+                          <td className="border p-2 text-center">{i + 1}</td>
+                          <td className="border p-2">{f.feeHead}</td>
+                          <td className="border p-2 text-right">₹ {final}</td>
+                          <td className="border p-2 text-right">
+                            ₹ {payments
+                              .filter((p) => p.feeHead === f.feeHead && p.receiptNo === selectedReceipt.receiptNo)
+                              .reduce((sum, p) => sum + p.amount, 0)}
+                          </td>
+                          <td className="border p-2 text-red-600 text-right">₹ {balance}</td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+
+                {/* Summary */}
+                <div className="mt-4 text-sm space-y-1">
+                  <p><b>Total Amount:</b> ₹ {student.feeStructure.reduce((sum: number, f: any) => sum + getFinal(f), 0)}</p>
+                  <p><b>Amount Paid (This Receipt):</b> ₹ {selectedReceipt.amount}</p>
+                  <p className="text-red-600"><b>Balance:</b> ₹ {student.feeStructure.reduce((sum: number, f: any) => sum + getFinal(f), 0) - payments.reduce((s, p) => s + p.amount, 0)}</p>
+                </div>
+
+                {/* Footer */}
+                {/* <div className="mt-6 flex justify-between text-sm">
+                  <p>Paid By: {selectedReceipt.mode}</p>
+                  <p>Signature</p>
+                </div> */}
+
+                {/* Buttons */}
+                <div className="flex justify-end gap-3 mt-6 print:hidden">
+                  <Button variant="outline" onClick={() => setSelectedReceipt(null)}>Close</Button>
+                  <Button onClick={() => window.print()}>🖨 Print</Button>
+                </div>
+
+              </div>
+            </div>
+          )}
+
         </>
       )}
     </div>
