@@ -27,7 +27,11 @@ const Layout = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { user, logout, theme, toggleTheme } = useAppStore();
+
   const [sidebarOpen, setSidebarOpen] = useState(true);
+
+  // ✅ NEW: Finance submenu state
+  const [financeOpen, setFinanceOpen] = useState(false);
 
   useEffect(() => {
     if (!user?.isAuthenticated) {
@@ -39,12 +43,31 @@ const Layout = () => {
     document.documentElement.classList.toggle('dark', theme === 'dark');
   }, [theme]);
 
+  // ✅ Auto open finance menu when route is inside finance
+  useEffect(() => {
+    if (location.pathname.startsWith('/finance')) {
+      setFinanceOpen(true);
+    }
+  }, [location.pathname]);
+
+  // ✅ UPDATED navItems
   const navItems = [
     { to: '/dashboard', icon: LayoutDashboard, label: 'Dashboard' },
     { to: '/students', icon: Users, label: 'Students' },
     { to: '/faculty', icon: GraduationCap, label: 'Faculty' },
     { to: '/fees', icon: DollarSign, label: 'Fees' },
-    { to: '/payments', icon: Receipt, label: 'Payments' },
+
+    // 🔥 Finance with submenu
+    {
+      to: '/finance',
+      icon: Receipt,
+      label: 'Finance',
+      children: [
+        { to: '/finance/fee-management', label: 'Fee Management' },
+        { to: '/finance/expenses', label: 'Expenses' },
+      ],
+    },
+
     { to: '/payroll', icon: Wallet, label: 'Payroll' },
     { to: '/courses', icon: BookOpen, label: 'Courses' },
     { to: '/settings', icon: Settings, label: 'Settings' },
@@ -85,20 +108,58 @@ const Layout = () => {
 
           {/* Navigation */}
           <nav className="flex-1 py-6 px-3 space-y-1 overflow-y-auto">
-            {navItems.map((item) => (
-              <NavLink
-                key={item.to}
-                to={item.to}
-                className={cn(
-                  'flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-200 text-white/70 hover:text-white hover:bg-white/15',
-                  !sidebarOpen && 'lg:justify-center'
-                )}
-                activeClassName="bg-white/25 text-white shadow-lg shadow-black/10 border border-white/20"
-              >
-                <item.icon className="h-5 w-5 flex-shrink-0" />
-                {sidebarOpen && <span>{item.label}</span>}
-              </NavLink>
-            ))}
+            {navItems.map((item) => {
+              // 🔥 If item has submenu
+              if (item.children) {
+                return (
+                  <div key={item.to}>
+                    {/* Parent */}
+                    <div
+                      onClick={() => setFinanceOpen(!financeOpen)}
+                      className={cn(
+                        'flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium cursor-pointer text-white/70 hover:text-white hover:bg-white/15',
+                        !sidebarOpen && 'lg:justify-center'
+                      )}
+                    >
+                      <item.icon className="h-5 w-5 flex-shrink-0" />
+                      {sidebarOpen && <span>{item.label}</span>}
+                    </div>
+
+                    {/* Submenu */}
+                    {financeOpen && sidebarOpen && (
+                      <div className="ml-8 space-y-1 mt-1">
+                        {item.children.map((sub) => (
+                          <NavLink
+                            key={sub.to}
+                            to={sub.to}
+                            className="block px-4 py-2 text-sm text-white/70 hover:text-white hover:bg-white/10 rounded-xl"
+                            activeClassName="bg-white/20 text-white"
+                          >
+                            {sub.label}
+                          </NavLink>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              }
+
+              // 🔥 Normal menu
+              return (
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  className={cn(
+                    'flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-medium transition-all duration-200 text-white/70 hover:text-white hover:bg-white/15',
+                    !sidebarOpen && 'lg:justify-center'
+                  )}
+                  activeClassName="bg-white/25 text-white shadow-lg shadow-black/10 border border-white/20"
+                >
+                  <item.icon className="h-5 w-5 flex-shrink-0" />
+                  {sidebarOpen && <span>{item.label}</span>}
+                </NavLink>
+              );
+            })}
           </nav>
 
           {/* User section */}
@@ -118,6 +179,7 @@ const Layout = () => {
               )}
               {sidebarOpen && <span>Toggle Theme</span>}
             </Button>
+
             <Button
               variant="ghost"
               className={cn(
@@ -127,7 +189,7 @@ const Layout = () => {
               onClick={handleLogout}
             >
               <LogOut className="h-5 w-5" />
-          {sidebarOpen && <span>Logout</span>}
+              {sidebarOpen && <span>Logout</span>}
             </Button>
           </div>
         </div>
@@ -136,46 +198,18 @@ const Layout = () => {
       {/* Main content */}
       <div className="flex-1 flex flex-col min-h-screen">
         {/* Header */}
-        <header className="sticky top-0 z-40 border-b border-[hsl(var(--border))]/80 bg-white/80 backdrop-blur supports-[backdrop-filter]:bg-white/65">
-          <div className="px-4 lg:px-8 py-4 flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex items-center gap-3">
-              <Button
-                variant="ghost"
-                size="icon"
-                onClick={() => setSidebarOpen(!sidebarOpen)}
-                className="lg:hidden rounded-full border border-[hsl(var(--border))]"
-              >
-                <Menu className="h-5 w-5" />
-              </Button>
-              <div>
-                <p className="text-[11px] uppercase tracking-[0.4em] text-muted-foreground">Dashboard</p>
-                <p className="text-lg font-semibold text-foreground">
-                  {navItems.find((item) => location.pathname.startsWith(item.to))?.label || 'Overview'}
-                </p>
-              </div>
-            </div>
+        <header className="sticky top-0 z-40 border-b border-[hsl(var(--border))]/80 bg-white/80 backdrop-blur">
+          <div className="px-4 lg:px-8 py-4 flex items-center justify-between">
+            <p className="text-lg font-semibold">
+              {navItems.find((item) =>
+                location.pathname.startsWith(item.to)
+              )?.label || 'Overview'}
+            </p>
 
-            <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-end">
-              <GlobalSearch className="max-w-2xl flex-1" />
-              <div className="flex items-center gap-4">
-                <Button
-                  variant="ghost"
-                  size="icon"
-                  className="rounded-full border border-[hsl(var(--border))] text-muted-foreground hover:text-foreground"
-                  onClick={() => navigate('/notifications')}
-                >
-                  <Bell className="h-5 w-5" />
-                </Button>
-                <div className="flex items-center gap-3 rounded-full bg-[hsl(var(--secondary))] px-4 py-2 shadow-inner">
-                  <div className="text-right">
-                    <p className="text-sm font-semibold capitalize">{user?.username}</p>
-                    <p className="text-xs text-muted-foreground"></p>
-                  </div>
-                  <div className="w-10 h-10 rounded-full bg-[hsl(var(--primary))] text-white flex items-center justify-center font-semibold">
-                    {user?.username ? user.username.charAt(0).toUpperCase() : 'A'}
-                  </div>
-                </div>
-              </div>
+            <div className="flex items-center gap-4">
+              <Button onClick={() => navigate('/notifications')}>
+                <Bell className="h-5 w-5" />
+              </Button>
             </div>
           </div>
         </header>
@@ -186,7 +220,6 @@ const Layout = () => {
         </main>
       </div>
 
-      {/* AI Chat Widget */}
       <AIChatWidget />
     </div>
   );

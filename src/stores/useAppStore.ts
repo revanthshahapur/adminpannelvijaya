@@ -57,7 +57,7 @@ interface FeeRecord {
   totalFee: number;
   paid: number;
   balance: number;
-  payments: Payment[];
+  Finance: Payment[];
 }
 
 interface Payment {
@@ -184,7 +184,7 @@ const initialFeeRecords: FeeRecord[] = [
     totalFee: 55000,
     paid: 35000,
     balance: 20000,
-    payments: [
+    Finance: [
       {
         id: 1,
         amount: 35000,
@@ -202,7 +202,7 @@ const initialFeeRecords: FeeRecord[] = [
     totalFee: 55000,
     paid: 42500,
     balance: 12500,
-    payments: [
+    Finance: [
       {
         id: 1,
         amount: 42500,
@@ -264,7 +264,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       totalFee: 55000,
       paid: 0,
       balance: 55000,
-      payments: [],
+      Finance: [],
     }];
     set({ feeRecords: updatedFeeRecords });
     localStorage.setItem('feeRecords', JSON.stringify(updatedFeeRecords));
@@ -325,7 +325,7 @@ export const useAppStore = create<AppState>((set, get) => ({
       const record = feeRecords[recordIndex];
       const newPayment = {
         ...payment,
-        id: record.payments.length + 1,
+        id: record.Finance.length + 1,
         receiptNo: `REC${String(Date.now()).slice(-6)}`,
       };
       
@@ -333,7 +333,7 @@ export const useAppStore = create<AppState>((set, get) => ({
         ...record,
         paid: record.paid + payment.amount,
         balance: record.totalFee - (record.paid + payment.amount),
-        payments: [...record.payments, newPayment],
+        Finance: [...record.Finance, newPayment],
       };
       
       const updatedRecords = [...feeRecords];

@@ -61,7 +61,7 @@ const categoryConfig: Record<NotificationCategory, { label: string; icon: React.
   all: { label: 'All updates', icon: Bell },
   students: { label: 'Students', icon: UserPlus },
   faculty: { label: 'Faculty', icon: GraduationCap },
-  fees: { label: 'Fees & payments', icon: DollarSign },
+  fees: { label: 'Fees & Finance', icon: DollarSign },
 };
 
 const Notifications = () => {
@@ -98,7 +98,7 @@ const Notifications = () => {
             <div>
               <CardTitle className="text-lg">Activity Centre</CardTitle>
               <p className="text-xs text-muted-foreground">
-                Track admissions, staff onboarding and fee payments in one place.
+                Track admissions, staff onboarding and fee Finance in one place.
               </p>
             </div>
           </div>

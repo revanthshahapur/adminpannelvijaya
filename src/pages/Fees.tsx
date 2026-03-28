@@ -123,7 +123,7 @@ const Fees = () => {
     <div className="space-y-6">
       <div>
         <h1 className="text-3xl font-bold mb-2">Fee Management</h1>
-        <p className="text-muted-foreground">Search and manage student fee payments</p>
+        <p className="text-muted-foreground">Search and manage student fee Finance</p>
       </div>
 
       {/* Search */}
@@ -278,11 +278,11 @@ const Fees = () => {
                 </div>
               </div>
 
-              {selectedStudent.feeRecord.payments.length > 0 && (
+              {selectedStudent.feeRecord.Finance.length > 0 && (
                 <div>
                   <h3 className="font-semibold mb-3">Payment History</h3>
                   <div className="space-y-2">
-                    {selectedStudent.feeRecord.payments.map((payment: any) => (
+                    {selectedStudent.feeRecord.Finance.map((payment: any) => (
                       <div
                         key={payment.id}
                         className="flex items-center justify-between p-3 rounded-lg bg-muted/50"

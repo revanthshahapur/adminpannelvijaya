@@ -168,11 +168,11 @@ const StudentProfile = () => {
                 </div>
               </div>
 
-              {feeRecord.payments.length > 0 && (
+              {feeRecord.Finance.length > 0 && (
                 <div className="mt-6">
                   <h3 className="font-semibold mb-3">Payment History</h3>
                   <div className="space-y-2">
-                    {feeRecord.payments.map((payment) => (
+                    {feeRecord.Finance.map((payment) => (
                       <div
                         key={payment.id}
                         className="flex items-center justify-between p-3 rounded-lg bg-muted/50"

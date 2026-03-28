@@ -10,14 +10,16 @@ import Layout from "./components/Layout";
 import Dashboard from "./pages/Dashboard";
 import Students from "./pages/Students";
 import StudentForm from "./pages/StudentForm";
-import StudentView from "./pages/StudentView"; // ✅ UPDATED (was StudentProfile)
+import StudentView from "./pages/StudentView";
 import Faculty from "./pages/Faculty";
 import Fees from "./pages/Fees";
-import Payments from "./pages/Payments";
+import Finance from "./pages/Finance";
 import Payroll from "./pages/Payroll";
 import Courses from "./pages/Courses";
 import Settings from "./pages/Settings";
 import Notifications from "./pages/Notifications";
+import FeeManagement from "./pages/FeeManagement";
+
 
 const queryClient = new QueryClient();
 
@@ -63,13 +65,26 @@ const App = () => {
               {/* Students */}
               <Route path="students" element={<Students />} />
               <Route path="students/new" element={<StudentForm />} />
-              <Route path="students/:id" element={<StudentView />} /> {/* ✅ FIXED */}
+              <Route path="students/:id" element={<StudentView />} />
               <Route path="students/:id/edit" element={<StudentForm />} />
 
               {/* Other Modules */}
               <Route path="faculty" element={<Faculty />} />
               <Route path="fees" element={<Fees />} />
-              <Route path="payments" element={<Payments />} />
+
+              {/* ✅ FINANCE MODULE (UPDATED) */}
+             <Route path="finance" element={<Finance />}>
+  <Route index element={<Navigate to="fee-management" replace />} />
+
+  {/* ✅ FIXED */}
+  <Route path="fee-management" element={<FeeManagement />} />
+
+  <Route
+    path="expenses"
+    element={<div>Expenses Module Coming Soon</div>}
+  />
+</Route>
+
               <Route path="payroll" element={<Payroll />} />
               <Route path="courses" element={<Courses />} />
               <Route path="settings" element={<Settings />} />
