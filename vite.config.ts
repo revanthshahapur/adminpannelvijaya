@@ -3,29 +3,36 @@ import react from "@vitejs/plugin-react-swc";
 import path from "path";
 import { componentTagger } from "lovable-tagger";
 
-export default defineConfig(({ mode }) => ({
-  server: {
-    host: "::",
-    port: 8080,
+export default defineConfig(({ mode }) => {
+  // Use localhost for development, production server for build
+  const apiTarget = mode === "development" 
+    ? "http://localhost:8080" 
+    : "https://my-school-pwjd.onrender.com";
 
-    // 🔥 PROXY FIX (NO BACKEND CHANGE)
-    proxy: {
-      "/api": {
-        target: "https://my-school-pwjd.onrender.com",
-        changeOrigin: true,
-        secure: false,
+  return {
+    server: {
+      host: "::",
+      port: 8081,
+
+      // Environment-based API proxy
+      proxy: {
+        "/api": {
+          target: apiTarget,
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
-  },
 
-  plugins: [
-    react(),
-    mode === "development" && componentTagger(),
-  ].filter(Boolean),
+    plugins: [
+      react(),
+      mode === "development" && componentTagger(),
+    ].filter(Boolean),
 
-  resolve: {
-    alias: {
-      "@": path.resolve(__dirname, "./src"),
+    resolve: {
+      alias: {
+        "@": path.resolve(__dirname, "./src"),
+      },
     },
-  },
-}));
+  };
+});

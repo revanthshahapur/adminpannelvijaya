@@ -48,7 +48,7 @@ type StudentFormValues = {
   relations: Relation[];
 };
 
-const StudentForm = () => {
+const StudentForm = ({ onClose }: { onClose?: () => void }) => {
   const [isRegistered, setIsRegistered] = useState(false);
   const [studentData, setStudentData] = useState<any>(null);
   const [isFeeSubmitted, setIsFeeSubmitted] = useState(false);
@@ -307,6 +307,13 @@ const handleFeeSubmit = async () => {
 
     toast.success("✅ Fee submitted successfully");
     setIsFeeSubmitted(true);
+
+    // Close the form after 2 seconds if onClose callback is provided
+    if (onClose) {
+      setTimeout(() => {
+        onClose();
+      }, 2000);
+    }
   } catch (error) {
     toast.error(error instanceof Error ? error.message : "Submit failed");
   }
