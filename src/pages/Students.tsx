@@ -61,10 +61,12 @@ const Students = () => {
   const [selectedStudent, setSelectedStudent] = useState<StudentDetails | null>(null);
   const [loadingDetails, setLoadingDetails] = useState(false);
   const [showAddForm, setShowAddForm] = useState(false);
+  const trimmedSearch = search.trim();
 
   useEffect(() => {
-    if (!search.trim()) {
+    if (!trimmedSearch || trimmedSearch.length < 3) {
       setStudents([]);
+      setLoading(false);
       return;
     }
 
@@ -99,7 +101,7 @@ const Students = () => {
           return;
         }
 
-        const url = `/api/${schoolId}/students/search?q=${encodeURIComponent(search)}`;
+        const url = `/api/${schoolId}/students/search?q=${encodeURIComponent(trimmedSearch)}`;
         console.log('Fetching students from:', url);
 
         const response = await fetch(
@@ -130,7 +132,7 @@ const Students = () => {
     };
 
     fetchStudents();
-  }, [search]);
+  }, [trimmedSearch]);
 
   const handleSelectStudent = async (student: StudentSearchResult) => {
     try {
@@ -202,7 +204,13 @@ const Students = () => {
                 </div>
               )}
 
-              {!loading && students.length === 0 && (
+              {!loading && trimmedSearch.length > 0 && trimmedSearch.length < 3 && (
+                <div className="p-4 text-sm text-muted-foreground">
+                  Type at least 3 characters
+                </div>
+              )}
+
+              {!loading && trimmedSearch.length >= 3 && students.length === 0 && (
                 <div className="p-4 text-sm text-muted-foreground">
                   No students found
                 </div>

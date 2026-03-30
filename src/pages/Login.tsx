@@ -73,11 +73,25 @@ const Login = () => {
           id: data.id,
           username: data.username,
           email: data.email,
+          schoolName:
+            data.schoolName ||
+            data.school_name ||
+            data.school?.name ||
+            data.school?.schoolName ||
+            null,
+          schoolId:
+            data.schoolId ||
+            data.school_id ||
+            data.school?.id ||
+            data.user?.schoolId ||
+            data.user?.school_id ||
+            null,
           roles: data.roles || [],
           isAuthenticated: true,
         };
 
         localStorage.setItem('user', JSON.stringify(userData));
+        localStorage.setItem('userName', data.username || '');
         localStorage.setItem('userRoles', JSON.stringify(data.roles || []));
 
         // ============================
@@ -92,6 +106,16 @@ const Login = () => {
 
         if (schoolId) {
           localStorage.setItem('schoolId', String(schoolId));
+        }
+
+        const schoolName =
+          data.schoolName ||
+          data.school_name ||
+          data.school?.name ||
+          data.school?.schoolName;
+
+        if (schoolName) {
+          localStorage.setItem('schoolName', String(schoolName));
         }
 
         // ============================
