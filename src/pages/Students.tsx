@@ -159,6 +159,7 @@ const Students = () => {
       }
 
       setSelectedStudent(data);
+      setShowAddForm(false);
       setStudents([]);
       setSearch('');
     } catch (error) {
@@ -235,7 +236,10 @@ const Students = () => {
 
         {/* Add Button */}
         <Button
-          onClick={() => setShowAddForm(true)}
+          onClick={() => {
+            setShowAddForm(true);
+            setSelectedStudent(null);
+          }}
           className="rounded-full px-8 h-11"
         >
           <Plus className="h-4 w-4 mr-2" />
@@ -448,7 +452,16 @@ const Students = () => {
                   <X className="h-4 w-4" />
                 </Button>
               </div>
-              <StudentForm onClose={() => setShowAddForm(false)} />
+              <StudentForm 
+                onClose={() => {
+                  setShowAddForm(false);
+                  setSearch('');
+                }}
+                onFeeFinalized={(studentData) => {
+                  setSelectedStudent(studentData);
+                  setShowAddForm(false);
+                }}
+              />
             </CardContent>
           </Card>
         </motion.div>

@@ -6,6 +6,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -48,7 +54,7 @@ type StudentFormValues = {
   relations: Relation[];
 };
 
-const StudentForm = ({ onClose }: { onClose?: () => void }) => {
+const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeFinalized?: (studentData: any) => void }) => {
   const [isRegistered, setIsRegistered] = useState(false);
   const [studentData, setStudentData] = useState<any>(null);
   const [isFeeSubmitted, setIsFeeSubmitted] = useState(false);
@@ -59,12 +65,19 @@ const StudentForm = ({ onClose }: { onClose?: () => void }) => {
   const [classes, setClasses] = useState<{ id: number; name: string }[]>([]);
 
   const currentDate = new Date().toISOString().slice(0, 10);
+  
+  // Calculate date 4 years ago for minimum DOB
+  const minDate = new Date();
+  minDate.setFullYear(minDate.getFullYear() - 4);
+  const minDateString = minDate.toISOString().slice(0, 10);
 
-  const { control, register, handleSubmit, setValue } =
+  const { control, register, handleSubmit, setValue, formState: { errors } } =
     useForm<StudentFormValues>({
+      mode: "onBlur",
       defaultValues: {
         academicYearId: "",
         admissionDate: currentDate,
+        dob: minDateString,
         relations: [
           {
             name: "",
@@ -214,20 +227,20 @@ const StudentForm = ({ onClose }: { onClose?: () => void }) => {
       const payload = {
         admissionNo: values.admissionNo,
         academicYearId: values.academicYearId,
-        aadhaarNo: values.aadhaarNo,
+        aadhaarNo: values.aadhaarNo.replace(/-/g, ""),
         fullName: values.fullName,
         dob: values.dob,
         admissionDate: values.admissionDate,
         placeOfBirth: values.placeOfBirth,
-        gender: values.gender.toUpperCase(),
+        gender: values.gender?.toUpperCase() || "",
         bloodGroup: values.bloodGroup,
-        religion: values.religion.trim(),
+        religion: values.religion?.trim() || "",
         caste: values.caste,
         subCaste: values.subCaste,
         category: values.category,
         permanentAddress: values.permanentAddress,
         currentAddress: values.currentAddress,
-        phone: values.phone.replace(/^0+/, ""),
+        phone: values.phone.replace(/-/g, "").replace(/^0+/, ""),
         email: values.email,
         admissionClassId: Number(values.admissionClassId),
         previousSchool: values.previousSchool,
@@ -236,10 +249,10 @@ const StudentForm = ({ onClose }: { onClose?: () => void }) => {
         satsId: Number(values.satsId),
         guardians: values.relations.map((r) => ({
           name: r.name,
-          phone: r.contact.replace(/^0+/, ""),
+          phone: r.contact.replace(/-/g, "").replace(/^0+/, ""),
           occupation: r.occupation,
           email: r.email || null,
-          relation: r.relation.toUpperCase(),
+          relation: r.relation?.toUpperCase() || "",
         })),
       };
 
@@ -253,6 +266,34 @@ const StudentForm = ({ onClose }: { onClose?: () => void }) => {
       });
 
       const data = await response.json();
+      
+      // ========== REGISTRATION RESPONSE DEBUG ==========
+      console.log("========== STUDENT REGISTRATION DEBUG ==========");
+      console.log("Response Status:", response.status, response.ok ? "OK" : "ERROR");
+      console.log("Full Response Object:", data);
+      console.log("Response Structure:");
+      console.log("  - student:", data.student);
+      console.log("  - feeStructure:", data.feeStructure);
+      if (data.enrollmentId) {
+        console.log("  - enrollmentId:", data.enrollmentId);
+      }
+      if (data.student) {
+        console.log("Student Details:");
+        console.log("    - id:", data.student.id);
+        console.log("    - name:", data.student.name);
+        console.log("    - admissionNo:", data.student.admissionNo);
+        console.log("    - admissionClassId:", data.student.admissionClassId);
+        console.log("    - schoolId:", data.student.schoolId);
+      }
+      if (data.feeStructure) {
+        console.log("Fee Structure Details:");
+        console.log("    - id:", data.feeStructure.id);
+        console.log("    - academicYearId:", data.feeStructure.academicYearId);
+        console.log("    - items count:", data.feeStructure.items?.length);
+      }
+
+      console.log("========== END REGISTRATION DEBUG ==========");
+      
       if (!response.ok) throw new Error(data.message);
 
       toast.success("🎉 Student registered successfully");
@@ -284,11 +325,25 @@ const handleFeeSubmit = async () => {
     const payload = {
       schoolId: studentData.student.schoolId,
       studentId: studentData.student.id,
-      enrollmentId: studentData.student.admissionClassId, // confirm if correct
+      enrollmentId: studentData.enrollmentId, // confirm if correct
       academicYearId: studentData.feeStructure.academicYearId,
       feeStructureId: studentData.feeStructure.id,
       discountPercentage: discountPercent,
     };
+
+    // ========== DEBUG LOGS ==========
+    console.log("========== FEE FINALIZATION DEBUG ==========");
+    console.log("Student Data:", studentData);
+    console.log("Payload being sent to API:", payload);
+    console.log("Individual values:");
+    console.log("  - schoolId:", studentData.student.schoolId);
+    console.log("  - studentId:", studentData.student.id);
+    console.log("  - enrollmentId (admissionClassId):", studentData.enrollmentId);
+    console.log("  - academicYearId:", studentData.feeStructure.academicYearId);
+    console.log("  - feeStructureId:", studentData.feeStructure.id);
+    console.log("  - discountPercentage:", discountPercent);
+    console.log("API Endpoint:", "/api/student-fees-accounts/registerStudentFeeAccount");
+    console.log("========== END DEBUG ==========");
 
     const response = await fetch(
       "/api/student-fees-accounts/registerStudentFeeAccount",
@@ -303,18 +358,34 @@ const handleFeeSubmit = async () => {
     );
 
     const data = await response.json();
+    
+    // ========== RESPONSE LOGS ==========
+    console.log("========== API RESPONSE DEBUG ==========");
+    console.log("Response Status:", response.status, response.ok ? "OK" : "ERROR");
+    console.log("Response Data:", data);
+    console.log("studentFeeObject in response:", data?.studentFeeObject);
+    console.log("========== END RESPONSE DEBUG ==========");
+    
     if (!response.ok) throw new Error(data.message);
 
     toast.success("✅ Fee submitted successfully");
     setIsFeeSubmitted(true);
 
-    // Close the form after 2 seconds if onClose callback is provided
+    // Call onFeeFinalized callback with complete response data from API (includes studentFeeObject)
+    if (onFeeFinalized) {
+      onFeeFinalized(data);
+    }
+
+    // Close the form after 3 seconds if onClose callback is provided
     if (onClose) {
       setTimeout(() => {
         onClose();
-      }, 2000);
+      }, 3000);
     }
   } catch (error) {
+    console.error("========== ERROR DEBUG ==========");
+    console.error("Error:", error);
+    console.error("========== END ERROR DEBUG ==========");
     toast.error(error instanceof Error ? error.message : "Submit failed");
   }
 };
@@ -363,7 +434,16 @@ const handleFeeSubmit = async () => {
           <CardContent className="p-6 space-y-4">
             <h2 className="text-lg font-semibold">Admission Details</h2>
             <div className="grid md:grid-cols-2 gap-4">
-              <Input {...register("admissionNo")} placeholder="Admission No" readOnly={isRegistered} />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Input {...register("admissionNo")} placeholder="Admission No" readOnly />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Admission No will be generated after student is registered
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
               <Input value={academicYearName || "Loading academic year..."} readOnly placeholder="Academic Year" />
               <Input type="hidden" {...register("academicYearId")} />
               <Controller
@@ -394,12 +474,130 @@ const handleFeeSubmit = async () => {
           <CardContent className="p-6 space-y-4">
             <h2 className="text-lg font-semibold">Personal Information</h2>
             <div className="grid md:grid-cols-2 gap-4">
-              <Input {...register("fullName")} placeholder="Full Name" />
-              <Input type="date" {...register("dob")} />
-              <Input {...register("gender")} placeholder="Gender" />
-              <Input {...register("bloodGroup")} placeholder="Blood Group" />
-              <Input {...register("aadhaarNo")} placeholder="Aadhaar No" />
-              <Input {...register("religion")} placeholder="Religion" />
+              <TooltipProvider>
+                <Tooltip>
+                  <TooltipTrigger asChild>
+                    <Input {...register("fullName")} placeholder="Full Name" />
+                  </TooltipTrigger>
+                  <TooltipContent>
+                    Name as per transfer certificate or Birth certificate
+                  </TooltipContent>
+                </Tooltip>
+              </TooltipProvider>
+              <div>
+                <TooltipProvider>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Input 
+                        type="date" 
+                        {...register("dob", {
+                          validate: {
+                            notFuture: (value) => {
+                              if (!value) return true;
+                              return new Date(value) <= new Date() || "Date cannot be in the future";
+                            },
+                            minAge: (value) => {
+                              if (!value) return true;
+                              const dob = new Date(value);
+                              const today = new Date();
+                              const age = today.getFullYear() - dob.getFullYear();
+                              const monthDiff = today.getMonth() - dob.getMonth();
+                              const actualAge = monthDiff < 0 ? age - 1 : age;
+                              return actualAge >= 4 || "Student must be at least 4 years old";
+                            }
+                          }
+                        })} 
+                        max={currentDate}
+                        className={errors.dob ? "border-red-500" : ""}
+                      />
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      Date of birth as per Birth Certificate (minimum 4 years old, no future dates)
+                    </TooltipContent>
+                  </Tooltip>
+                </TooltipProvider>
+                {errors.dob && <p className="text-red-500 text-sm mt-1">{errors.dob.message}</p>}
+              </div>
+              <Controller
+                name="gender"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Gender" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Male">Male</SelectItem>
+                      <SelectItem value="Female">Female</SelectItem>
+                      <SelectItem value="Other">Other</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <Controller
+                name="bloodGroup"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Blood Group" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="O+">O+</SelectItem>
+                      <SelectItem value="O-">O-</SelectItem>
+                      <SelectItem value="A+">A+</SelectItem>
+                      <SelectItem value="A-">A-</SelectItem>
+                      <SelectItem value="B+">B+</SelectItem>
+                      <SelectItem value="B-">B-</SelectItem>
+                      <SelectItem value="AB+">AB+</SelectItem>
+                      <SelectItem value="AB-">AB-</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
+              <div>
+                <Input 
+                  {...register("aadhaarNo", {
+                    pattern: {
+                      value: /^\d{4}-\d{4}-\d{4}$/,
+                      message: "Aadhaar must be in format: XXXX-XXXX-XXXX"
+                    }
+                  })} 
+                  placeholder="Aadhaar No (XXXX-XXXX-XXXX)" 
+                  maxLength={14}
+                  className={errors.aadhaarNo ? "border-red-500" : ""}
+                  onInput={(e) => {
+                    // Remove all non-digits
+                    let value = e.currentTarget.value.replace(/\D/g, '');
+                    // Add hyphens after every 4 digits
+                    if (value.length > 4) {
+                      value = value.slice(0, 4) + '-' + value.slice(4);
+                    }
+                    if (value.length > 9) {
+                      value = value.slice(0, 9) + '-' + value.slice(9);
+                    }
+                    e.currentTarget.value = value.slice(0, 14);
+                  }}
+                />
+                {errors.aadhaarNo && <p className="text-red-500 text-sm mt-1">{errors.aadhaarNo.message}</p>}
+              </div>
+              <Controller
+                name="religion"
+                control={control}
+                render={({ field }) => (
+                  <Select onValueChange={field.onChange} value={field.value || ""}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Select Religion" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="Hindu">Hindu</SelectItem>
+                      <SelectItem value="Christian">Christian</SelectItem>
+                      <SelectItem value="Muslim">Muslim</SelectItem>
+                      <SelectItem value="Jain">Jain</SelectItem>
+                    </SelectContent>
+                  </Select>
+                )}
+              />
             </div>
           </CardContent>
         </Card>
@@ -409,8 +607,43 @@ const handleFeeSubmit = async () => {
           <CardContent className="p-6 space-y-4">
             <h2 className="text-lg font-semibold">Contact & Address</h2>
             <div className="grid md:grid-cols-2 gap-4">
-              <Input {...register("phone")} placeholder="Phone" />
-              <Input {...register("email")} placeholder="Email" />
+              <div>
+                <Input 
+                  {...register("phone", {
+                    pattern: {
+                      value: /^\d{5}-\d{5}$/,
+                      message: "Phone must be in format: XXXXX-XXXXX"
+                    }
+                  })} 
+                  placeholder="Phone (XXXXX-XXXXX)" 
+                  maxLength={11}
+                  className={errors.phone ? "border-red-500" : ""}
+                  onInput={(e) => {
+                    // Remove all non-digits
+                    let value = e.currentTarget.value.replace(/\D/g, '');
+                    // Add hyphen after 5 digits
+                    if (value.length > 5) {
+                      value = value.slice(0, 5) + '-' + value.slice(5);
+                    }
+                    e.currentTarget.value = value.slice(0, 11);
+                  }}
+                />
+                {errors.phone && <p className="text-red-500 text-sm mt-1">{errors.phone.message}</p>}
+              </div>
+              <div>
+                <Input 
+                  {...register("email", {
+                    pattern: {
+                      value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                      message: "Please enter a valid email address"
+                    }
+                  })} 
+                  placeholder="Email ID" 
+                  type="email"
+                  className={errors.email ? "border-red-500" : ""}
+                />
+                {errors.email && <p className="text-red-500 text-sm mt-1">{errors.email.message}</p>}
+              </div>
             </div>
             <Textarea {...register("permanentAddress")} placeholder="Permanent Address" />
             <Textarea {...register("currentAddress")} placeholder="Current Address" />
@@ -426,10 +659,58 @@ const handleFeeSubmit = async () => {
                 <CardContent className="p-4 space-y-3">
                   <div className="grid md:grid-cols-2 gap-3">
                     <Input {...register(`relations.${index}.name`)} placeholder="Name" />
-                    <Input {...register(`relations.${index}.contact`)} placeholder="Phone" />
+                    <div>
+                      <Input 
+                        {...register(`relations.${index}.contact`, {
+                          pattern: {
+                            value: /^\d{5}-\d{5}$/,
+                            message: "Phone must be in format: XXXXX-XXXXX"
+                          }
+                        })} 
+                        placeholder="Phone (XXXXX-XXXXX)" 
+                        maxLength={11}
+                        className={errors.relations?.[index]?.contact ? "border-red-500" : ""}
+                        onInput={(e) => {
+                          let value = e.currentTarget.value.replace(/\D/g, '');
+                          if (value.length > 5) {
+                            value = value.slice(0, 5) + '-' + value.slice(5);
+                          }
+                          e.currentTarget.value = value.slice(0, 11);
+                        }}
+                      />
+                      {errors.relations?.[index]?.contact && <p className="text-red-500 text-sm mt-1">{errors.relations[index]?.contact?.message}</p>}
+                    </div>
                     <Input {...register(`relations.${index}.occupation`)} placeholder="Occupation" />
-                    <Input {...register(`relations.${index}.email`)} placeholder="Email" />
-                    <Input {...register(`relations.${index}.relation`)} placeholder="Relation" />
+                    <div>
+                      <Input 
+                        {...register(`relations.${index}.email`, {
+                          pattern: {
+                            value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+                            message: "Please enter a valid email address"
+                          }
+                        })} 
+                        placeholder="Email" 
+                        type="email"
+                        className={errors.relations?.[index]?.email ? "border-red-500" : ""}
+                      />
+                      {errors.relations?.[index]?.email && <p className="text-red-500 text-sm mt-1">{errors.relations[index]?.email?.message}</p>}
+                    </div>
+                    <Controller
+                      name={`relations.${index}.relation`}
+                      control={control}
+                      render={({ field }) => (
+                        <Select onValueChange={field.onChange} value={field.value || ""}>
+                          <SelectTrigger>
+                            <SelectValue placeholder="Select Relation" />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="Father">Father</SelectItem>
+                            <SelectItem value="Mother">Mother</SelectItem>
+                            <SelectItem value="Guardian">Guardian</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
                   </div>
 
                   <Button type="button" variant="destructive" onClick={() => remove(index)}>
@@ -468,13 +749,27 @@ const handleFeeSubmit = async () => {
 
       {/* ---- RIGHT: Fee Preview ---- */}
       {isRegistered && studentData && (
-  <div className="w-1/2 transition-all duration-500">
+  <div className="w-1/2 transition-all duration-500 space-y-4">
+    {/* Congratulations Message - Only after fee finalization */}
+    {isFeeSubmitted && (
+      <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-300">
+        <CardContent className="p-6">
+          <div className="flex items-center gap-3">
+            <span className="text-4xl">🎉</span>
+            <div>
+              <h3 className="text-lg font-bold text-green-700">Congratulations!</h3>
+              <p className="text-sm text-green-600">Student admission completed successfully</p>
+              <p className="text-xs text-green-700 mt-1">{studentData.student.fullName} has been registered and fee finalized</p>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    )}
+
+    {/* Fee Structure Card */}
     <Card>
       <CardContent className="p-6 space-y-4">
-        <h2 className="text-lg font-semibold"> Fee Preview</h2>
-
-        <p><b>Student Name:</b> {studentData.student.name}</p>
-        <p><b>Admission No:</b> {studentData.student.admissionNo}</p>
+        <h2 className="text-lg font-semibold">Fee Preview</h2>
 
         <table className="w-full border mt-4">
           <thead>
@@ -519,41 +814,49 @@ const handleFeeSubmit = async () => {
           Total: ₹ {totalAmount.toFixed(2)}
         </p>
 
-        <div className="text-right text-red-500 flex items-center justify-end gap-3">
-          <span>Discount %</span>
-          <Input
-            type="number"
-            min={0}
-            max={100}
-            step={0.01}
-            className="w-24"
-            value={discountPercent}
-            onChange={(e) => {
-              const val = parseFloat(e.target.value);
-              setDiscountPercent(isNaN(val) ? 0 : Math.min(Math.max(val, 0), 100));
-            }}
-          />
-        </div>
+        {!isFeeSubmitted && (
+          <>
+            <div className="text-right text-red-500 flex items-center justify-end gap-3">
+              <span>Discount %</span>
+              <Input
+                type="number"
+                min={0}
+                max={100}
+                step={0.01}
+                className="w-24"
+                value={discountPercent}
+                onChange={(e) => {
+                  const val = parseFloat(e.target.value);
+                  setDiscountPercent(isNaN(val) ? 0 : Math.min(Math.max(val, 0), 100));
+                }}
+              />
+            </div>
 
-        <p className="text-right text-red-500">
-          Discount: ₹ {totalDiscount.toFixed(2)}
-        </p>
+            <p className="text-right text-red-500">
+              Discount: ₹ {totalDiscount.toFixed(2)}
+            </p>
 
-        <p className="text-right font-bold text-green-600">
-          Final: ₹ {finalAmount.toFixed(2)}
-        </p>
+            <p className="text-right font-bold text-green-600">
+              Final: ₹ {finalAmount.toFixed(2)}
+            </p>
 
-        {/* ✅ ADD BUTTON HERE */}
-        <div className="flex justify-end mt-4">
-          <Button
-            className="bg-green-600 hover:bg-green-700 text-white px-6"
-            onClick={handleFeeSubmit}
-            disabled={isFeeSubmitted}
-          >
-            {isFeeSubmitted ? "Fee Finalised" : "Finalise Fee"}
-          </Button>
-        </div>
+            <div className="flex justify-end mt-4">
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-white px-6"
+                onClick={handleFeeSubmit}
+              >
+                Finalise Fee
+              </Button>
+            </div>
+          </>
+        )}
 
+        {isFeeSubmitted && (
+          <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center">
+            <p className="text-green-700 font-semibold">✅ Fee Finalized Successfully</p>
+            <p className="text-green-600 text-sm mt-1">Final Amount: ₹ {finalAmount.toFixed(2)}</p>
+          </div>
+        )}
       </CardContent>
     </Card>
   </div>
