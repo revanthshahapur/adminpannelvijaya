@@ -1,5 +1,5 @@
 import { useForm, useFieldArray, Controller } from "react-hook-form";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -58,11 +58,14 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
   const [isRegistered, setIsRegistered] = useState(false);
   const [studentData, setStudentData] = useState<any>(null);
   const [isFeeSubmitted, setIsFeeSubmitted] = useState(false);
+  const [isValidatingAadhaar, setIsValidatingAadhaar] = useState(false);
+  const [lastValidatedAadhaar, setLastValidatedAadhaar] = useState<string>("");
 
   // ✅ NEW STATES (overall discount only)
   const [discountPercent, setDiscountPercent] = useState<number>(0);
   const [academicYearName, setAcademicYearName] = useState<string>("");
   const [classes, setClasses] = useState<{ id: number; name: string }[]>([]);
+  const aadhaarValidationRequestRef = useRef(0);
 
   const currentDate = new Date().toISOString().slice(0, 10);
   
@@ -71,7 +74,7 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
   minDate.setFullYear(minDate.getFullYear() - 4);
   const minDateString = minDate.toISOString().slice(0, 10);
 
-  const { control, register, handleSubmit, setValue, formState: { errors } } =
+  const { control, register, handleSubmit, setValue, watch, setError, clearErrors, formState: { errors } } =
     useForm<StudentFormValues>({
       mode: "onBlur",
       defaultValues: {
@@ -95,6 +98,111 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
     control,
     name: "relations",
   });
+  const aadhaarNo = watch("aadhaarNo");
+
+  const getSessionContext = () => {
+    const token = localStorage.getItem("authToken");
+
+    let schoolId = localStorage.getItem("schoolId");
+    if (!schoolId) {
+      const storedUser = localStorage.getItem("user");
+      if (storedUser) {
+        try {
+          const parsedUser = JSON.parse(storedUser);
+          schoolId =
+            parsedUser.schoolId || parsedUser.school_id ||
+            parsedUser.school?.id || parsedUser.user?.schoolId ||
+            parsedUser.user?.school_id;
+        } catch {
+          // ignore parse errors
+        }
+      }
+    }
+
+    return { token, schoolId: schoolId ? String(schoolId) : "" };
+  };
+
+  const validateAadhaarNumber = async (formattedAadhaar: string) => {
+    const normalizedAadhaar = formattedAadhaar.replace(/\D/g, "");
+
+    if (normalizedAadhaar.length !== 12) {
+      setLastValidatedAadhaar("");
+      clearErrors("aadhaarNo");
+      return false;
+    }
+
+    if (lastValidatedAadhaar === normalizedAadhaar && !errors.aadhaarNo) {
+      return true;
+    }
+
+    const { token, schoolId } = getSessionContext();
+    if (!token) {
+      setError("aadhaarNo", {
+        type: "manual",
+        message: "Token missing. Please login again.",
+      });
+      return false;
+    }
+
+    if (!schoolId) {
+      setError("aadhaarNo", {
+        type: "manual",
+        message: "School ID missing. Unable to validate Aadhaar.",
+      });
+      return false;
+    }
+
+    const currentRequestId = ++aadhaarValidationRequestRef.current;
+    setIsValidatingAadhaar(true);
+
+    try {
+      const response = await fetch(
+        `/api/${schoolId}/students/validate-aadhaar?aadhaarNumber=${encodeURIComponent(normalizedAadhaar)}`,
+        {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (currentRequestId !== aadhaarValidationRequestRef.current) {
+        return false;
+      }
+
+      const aadhaarAlreadyExists = data?.data === true;
+      const isValid = response.ok && data?.data === false;
+
+      if (!response.ok || aadhaarAlreadyExists || !isValid) {
+        throw new Error(
+          (aadhaarAlreadyExists && "Aadhaar number already exists") ||
+          data?.message ||
+          data?.error ||
+          data?.errors?.aadhaarNumber?.[0] ||
+          "Aadhaar number already exists"
+        );
+      }
+
+      clearErrors("aadhaarNo");
+      setLastValidatedAadhaar(normalizedAadhaar);
+      return true;
+    } catch (error) {
+      if (currentRequestId === aadhaarValidationRequestRef.current) {
+        setLastValidatedAadhaar("");
+        setError("aadhaarNo", {
+          type: "manual",
+          message: error instanceof Error ? error.message : "Failed to validate Aadhaar number",
+        });
+      }
+      return false;
+    } finally {
+      if (currentRequestId === aadhaarValidationRequestRef.current) {
+        setIsValidatingAadhaar(false);
+      }
+    }
+  };
 
   useEffect(() => {
     const fetchActiveAcademicYear = async () => {
@@ -210,6 +318,42 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
     fetchClasses();
   }, [setValue]);
 
+  useEffect(() => {
+    const normalizedAadhaar = (aadhaarNo || "").replace(/\D/g, "");
+
+    if (!normalizedAadhaar) {
+      setLastValidatedAadhaar("");
+      setIsValidatingAadhaar(false);
+      clearErrors("aadhaarNo");
+      return;
+    }
+
+    if (normalizedAadhaar.length < 12) {
+      setLastValidatedAadhaar("");
+      setIsValidatingAadhaar(false);
+      if (errors.aadhaarNo?.type === "manual") {
+        clearErrors("aadhaarNo");
+      }
+      return;
+    }
+
+    if (normalizedAadhaar.length !== 12) {
+      setLastValidatedAadhaar("");
+      setIsValidatingAadhaar(false);
+      setError("aadhaarNo", {
+        type: "manual",
+        message: "Aadhaar must be 12 digits",
+      });
+      return;
+    }
+
+    const debounceTimer = window.setTimeout(() => {
+      void validateAadhaarNumber(aadhaarNo || "");
+    }, 500);
+
+    return () => window.clearTimeout(debounceTimer);
+  }, [aadhaarNo, clearErrors, errors.aadhaarNo?.type, setError]);
+
   // ================= SUBMIT =================
   const onSubmit = async (values: StudentFormValues) => {
     try {
@@ -220,6 +364,11 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
       const token = localStorage.getItem("authToken");
       if (!token) {
         toast.error("Token missing. Please login again.");
+        return;
+      }
+
+      const isAadhaarValid = await validateAadhaarNumber(values.aadhaarNo);
+      if (!isAadhaarValid) {
         return;
       }
 
@@ -579,6 +728,9 @@ const handleFeeSubmit = async () => {
                     e.currentTarget.value = value.slice(0, 14);
                   }}
                 />
+                {isValidatingAadhaar && !errors.aadhaarNo && (
+                  <p className="text-muted-foreground text-sm mt-1">Validating Aadhaar number...</p>
+                )}
                 {errors.aadhaarNo && <p className="text-red-500 text-sm mt-1">{errors.aadhaarNo.message}</p>}
               </div>
               <Controller
@@ -741,8 +893,12 @@ const handleFeeSubmit = async () => {
 
         {/* Submit */}
         <div className="flex justify-end gap-4">
-          <Button type="submit" className="px-8">
-            Register Student
+          <Button
+            type="submit"
+            className="px-8"
+            disabled={isValidatingAadhaar || (!!aadhaarNo && !!errors.aadhaarNo)}
+          >
+            {isValidatingAadhaar ? "Validating Aadhaar..." : "Register Student"}
           </Button>
         </div>
       </form>
