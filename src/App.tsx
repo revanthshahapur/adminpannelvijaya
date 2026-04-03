@@ -19,6 +19,7 @@ import Courses from "./pages/Courses";
 import Settings from "./pages/Settings";
 import Notifications from "./pages/Notifications";
 import FeeManagement from "./pages/FeeManagement";
+import Expenses from "./pages/Expenses";
 
 
 const queryClient = new QueryClient();
@@ -79,10 +80,7 @@ const App = () => {
   {/* ✅ FIXED */}
   <Route path="fee-management" element={<FeeManagement />} />
 
-  <Route
-    path="expenses"
-    element={<div>Expenses Module Coming Soon</div>}
-  />
+  <Route path="expenses" element={<Expenses />} />
 </Route>
 
               <Route path="payroll" element={<Payroll />} />
