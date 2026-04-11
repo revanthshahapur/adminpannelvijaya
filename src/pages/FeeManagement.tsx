@@ -27,6 +27,7 @@ import {
 } from "@/components/ui/table";
 import { Loader, Printer } from "lucide-react";
 import { toast } from "sonner";
+import { formatINR } from '@/lib/utils';
 
 type StudentSearchResult = {
   studentId: number;
@@ -109,12 +110,7 @@ const FeeManagement = () => {
     ? feeSummary.totalAmount - feeSummary.totalAmountPaid
     : 0;
 
-  const formatCurrency = (amount: number) =>
-    new Intl.NumberFormat("en-IN", {
-      style: "currency",
-      currency: "INR",
-      maximumFractionDigits: 2,
-    }).format(amount);
+  const formatCurrency = (amount: number) => formatINR(amount);
 
   const formatDisplayDate = (value: string) => {
     if (!value) {

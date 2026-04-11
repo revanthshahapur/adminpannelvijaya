@@ -4,6 +4,7 @@ import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { ArrowLeft, Edit, Download, FileText } from 'lucide-react';
 import { motion } from 'framer-motion';
+import { formatINR } from '@/lib/utils';
 
 const StudentProfile = () => {
   const { id } = useParams();
@@ -136,7 +137,9 @@ const StudentProfile = () => {
             </div>
             <div className="flex justify-between">
               <span className="text-muted-foreground">Annual Family Income:</span>
-              <span className="font-medium">₹{student.income.toLocaleString()}</span>
+              <span className="font-medium">
+                {formatINR(student.income, { minimumFractionDigits: 0, maximumFractionDigits: 0 })}
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -150,21 +153,15 @@ const StudentProfile = () => {
               <div className="grid gap-4 md:grid-cols-3">
                 <div className="p-4 rounded-lg bg-primary/10">
                   <p className="text-sm text-muted-foreground mb-1">Total Fee</p>
-                  <p className="text-2xl font-bold text-primary">
-                    ₹{feeRecord.totalFee.toLocaleString()}
-                  </p>
+                  <p className="text-2xl font-bold text-primary">{formatINR(feeRecord.totalFee)}</p>
                 </div>
                 <div className="p-4 rounded-lg bg-success/10">
                   <p className="text-sm text-muted-foreground mb-1">Paid</p>
-                  <p className="text-2xl font-bold text-success">
-                    ₹{feeRecord.paid.toLocaleString()}
-                  </p>
+                  <p className="text-2xl font-bold text-success">{formatINR(feeRecord.paid)}</p>
                 </div>
                 <div className="p-4 rounded-lg bg-warning/10">
                   <p className="text-sm text-muted-foreground mb-1">Balance</p>
-                  <p className="text-2xl font-bold text-warning">
-                    ₹{feeRecord.balance.toLocaleString()}
-                  </p>
+                  <p className="text-2xl font-bold text-warning">{formatINR(feeRecord.balance)}</p>
                 </div>
               </div>
 
@@ -180,7 +177,7 @@ const StudentProfile = () => {
                         <div className="flex items-center gap-3">
                           <FileText className="h-5 w-5 text-primary" />
                           <div>
-                            <p className="font-medium">₹{payment.amount.toLocaleString()}</p>
+                            <p className="font-medium">{formatINR(payment.amount)}</p>
                             <p className="text-xs text-muted-foreground">
                               {payment.method} • {payment.date}
                             </p>

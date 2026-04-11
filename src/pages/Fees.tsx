@@ -23,6 +23,7 @@ import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 import jsPDF from 'jspdf';
 import { QRCodeSVG } from 'qrcode.react';
+import { formatINR } from '@/lib/utils';
 
 const Fees = () => {
   const { students, feeRecords, addPayment } = useAppStore();
@@ -74,14 +75,13 @@ const Fees = () => {
     toast.success('Payment recorded successfully');
     generateReceipt();
     setIsPaymentOpen(false);
-    handleSearch(); // Refresh data
+    handleSearch();
   };
 
   const generateReceipt = () => {
     const doc = new jsPDF();
     const amount = parseFloat(paymentData.amount);
 
-    // Header
     doc.setFontSize(20);
     doc.setFont('helvetica', 'bold');
     doc.text('School Management System', 105, 20, { align: 'center' });
@@ -89,30 +89,22 @@ const Fees = () => {
     doc.setFontSize(16);
     doc.text('Fee Receipt', 105, 30, { align: 'center' });
 
-    // Student details
     doc.setFontSize(12);
     doc.setFont('helvetica', 'normal');
     doc.text(`Student Name: ${selectedStudent.name}`, 20, 50);
     doc.text(`Register No: ${selectedStudent.regNo}`, 20, 60);
     doc.text(`Class: ${selectedStudent.class}`, 20, 70);
 
-    // Payment details
-    doc.text(`Amount Paid: ₹${amount.toLocaleString()}`, 20, 90);
+    doc.text(`Amount Paid: ${formatINR(amount)}`, 20, 90);
     doc.text(`Payment Method: ${paymentData.method}`, 20, 100);
     doc.text(`Transaction ID: ${paymentData.transactionId}`, 20, 110);
     doc.text(`Date: ${paymentData.date}`, 20, 120);
 
-    // Fee summary
     const newBalance = selectedStudent.feeRecord.balance - amount;
-    doc.text(`Total Fee: ₹${selectedStudent.feeRecord.totalFee.toLocaleString()}`, 20, 140);
-    doc.text(
-      `Total Paid: ₹${(selectedStudent.feeRecord.paid + amount).toLocaleString()}`,
-      20,
-      150
-    );
-    doc.text(`Balance: ₹${newBalance.toLocaleString()}`, 20, 160);
+    doc.text(`Total Fee: ${formatINR(selectedStudent.feeRecord.totalFee)}`, 20, 140);
+    doc.text(`Total Paid: ${formatINR(selectedStudent.feeRecord.paid + amount)}`, 20, 150);
+    doc.text(`Balance: ${formatINR(newBalance)}`, 20, 160);
 
-    // Footer
     doc.setFontSize(10);
     doc.text('This is a computer-generated receipt', 105, 280, { align: 'center' });
 
@@ -126,7 +118,6 @@ const Fees = () => {
         <p className="text-muted-foreground">Search and manage student fee Finance</p>
       </div>
 
-      {/* Search */}
       <Card className="glass-card">
         <CardContent className="p-6">
           <div className="flex gap-4">
@@ -148,7 +139,6 @@ const Fees = () => {
         </CardContent>
       </Card>
 
-      {/* Student fee details */}
       {selectedStudent && selectedStudent.feeRecord && (
         <motion.div
           initial={{ opacity: 0, y: 20 }}
@@ -261,19 +251,19 @@ const Fees = () => {
                 <div className="p-4 rounded-lg bg-primary/10">
                   <p className="text-sm text-muted-foreground mb-1">Total Fee</p>
                   <p className="text-2xl font-bold text-primary">
-                    ₹{selectedStudent.feeRecord.totalFee.toLocaleString()}
+                    {formatINR(selectedStudent.feeRecord.totalFee)}
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-success/10">
                   <p className="text-sm text-muted-foreground mb-1">Paid</p>
                   <p className="text-2xl font-bold text-success">
-                    ₹{selectedStudent.feeRecord.paid.toLocaleString()}
+                    {formatINR(selectedStudent.feeRecord.paid)}
                   </p>
                 </div>
                 <div className="p-4 rounded-lg bg-warning/10">
                   <p className="text-sm text-muted-foreground mb-1">Balance</p>
                   <p className="text-2xl font-bold text-warning">
-                    ₹{selectedStudent.feeRecord.balance.toLocaleString()}
+                    {formatINR(selectedStudent.feeRecord.balance)}
                   </p>
                 </div>
               </div>
@@ -288,7 +278,7 @@ const Fees = () => {
                         className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
                       >
                         <div>
-                          <p className="font-medium">₹{payment.amount.toLocaleString()}</p>
+                          <p className="font-medium">{formatINR(payment.amount)}</p>
                           <p className="text-xs text-muted-foreground">
                             {payment.method} • {payment.date} • {payment.transactionId}
                           </p>

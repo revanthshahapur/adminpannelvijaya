@@ -11,7 +11,7 @@ import { toast } from '@/hooks/use-toast';
 import { Plus, Banknote, Smartphone, FileText, Building2, CreditCard, ChevronsUpDown, Check } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { QRCodeSVG } from 'qrcode.react';
-import { cn } from '@/lib/utils';
+import { cn, formatINR, INR_SYMBOL } from '@/lib/utils';
 
 const paymentMethods = [
   { id: 'cash', label: 'Cash', icon: Banknote, color: 'text-green-500' },
@@ -70,7 +70,7 @@ const PaymentDialog = () => {
     if (selectedFeeRecord && parsedAmount > selectedFeeRecord.balance) {
       toast({
         title: 'Amount Exceeds Balance',
-        description: `Maximum payable amount is ₹${selectedFeeRecord.balance.toLocaleString()}`,
+        description: `Maximum payable amount is ${formatINR(selectedFeeRecord.balance)}`,
         variant: 'destructive',
       });
       return;
@@ -94,7 +94,7 @@ const PaymentDialog = () => {
 
     toast({
       title: 'Payment Recorded',
-      description: `₹${parsedAmount.toLocaleString()} payment recorded successfully`,
+      description: `${formatINR(parsedAmount)} payment recorded successfully`,
     });
 
     resetForm();
@@ -169,7 +169,7 @@ const PaymentDialog = () => {
                               <span className="font-medium">{student.name}</span>
                               <span className="text-xs text-muted-foreground">
                                 {student.regNo} • Class: {student.class}
-                                {feeRecord && ` • Balance: ₹${feeRecord.balance.toLocaleString()}`}
+                                {feeRecord && ` • Balance: ${formatINR(feeRecord.balance)}`}
                               </span>
                             </div>
                           </CommandItem>
@@ -193,15 +193,15 @@ const PaymentDialog = () => {
                   <div className="grid grid-cols-3 gap-4 text-center">
                     <div>
                       <p className="text-xs text-muted-foreground">Total Fee</p>
-                      <p className="text-lg font-bold">₹{selectedFeeRecord.totalFee.toLocaleString()}</p>
+                      <p className="text-lg font-bold">{formatINR(selectedFeeRecord.totalFee)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Paid</p>
-                      <p className="text-lg font-bold text-green-500">₹{selectedFeeRecord.paid.toLocaleString()}</p>
+                      <p className="text-lg font-bold text-green-500">{formatINR(selectedFeeRecord.paid)}</p>
                     </div>
                     <div>
                       <p className="text-xs text-muted-foreground">Balance</p>
-                      <p className="text-lg font-bold text-destructive">₹{selectedFeeRecord.balance.toLocaleString()}</p>
+                      <p className="text-lg font-bold text-destructive">{formatINR(selectedFeeRecord.balance)}</p>
                     </div>
                   </div>
                 </CardContent>
@@ -211,7 +211,7 @@ const PaymentDialog = () => {
 
           {/* Amount Input */}
           <div className="space-y-2">
-            <Label>Amount (₹) *</Label>
+            <Label>{`Amount (${INR_SYMBOL}) *`}</Label>
             <Input
               type="number"
               placeholder="Enter amount"

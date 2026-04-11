@@ -8,6 +8,7 @@ import { toast } from 'sonner';
 import { Card, CardContent } from '@/components/ui/card';
 import StudentForm from './StudentForm';
 
+import { formatINR } from '@/lib/utils';
 
 type StudentSearchResult = {
   studentId: number;
@@ -358,16 +359,16 @@ const Students = () => {
                       </div>
                       <div className="pt-4 border-t">
                         <p className="text-sm text-muted-foreground">Total Amount</p>
-                        <p className="font-bold text-lg">₹{selectedStudent.studentFeeObject.totalAmount.toFixed(2)}</p>
+                        <p className="font-bold text-lg">{formatINR(selectedStudent.studentFeeObject.totalAmount)}</p>
                       </div>
                       <div>
                         <p className="text-sm text-muted-foreground">Amount Paid</p>
-                        <p className="font-bold text-green-600">₹{selectedStudent.studentFeeObject.totalAmountPaid.toFixed(2)}</p>
+                        <p className="font-bold text-green-600">{formatINR(selectedStudent.studentFeeObject.totalAmountPaid)}</p>
                       </div>
                       <div className="pt-2 border-t">
                         <p className="text-sm text-muted-foreground">Balance Due</p>
                         <p className="font-bold text-red-600">
-                          ₹{(selectedStudent.studentFeeObject.totalAmount - selectedStudent.studentFeeObject.totalAmountPaid).toFixed(2)}
+                          {formatINR(selectedStudent.studentFeeObject.totalAmount - selectedStudent.studentFeeObject.totalAmountPaid)}
                         </p>
                       </div>
                     </div>

@@ -1,5 +1,5 @@
 import { useForm, useFieldArray, Controller } from "react-hook-form";
-import { useState, useEffect, useRef } from "react";
+import { Fragment, useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { formatINR } from "@/lib/utils";
 
 type Relation = {
   name: string;
@@ -62,7 +63,10 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
   const [lastValidatedAadhaar, setLastValidatedAadhaar] = useState<string>("");
 
   // ✅ NEW STATES (overall discount only)
-  const [discountPercent, setDiscountPercent] = useState<number>(0);
+  const [concessionAmount, setConcessionAmount] = useState<number>(0);
+  const [concessionType, setConcessionType] = useState<string>("");
+  const [concessionReference, setConcessionReference] = useState<string>("");
+  const [expandedInstallmentId, setExpandedInstallmentId] = useState<number | null>(null);
   const [academicYearName, setAcademicYearName] = useState<string>("");
   const [classes, setClasses] = useState<{ id: number; name: string }[]>([]);
   const aadhaarValidationRequestRef = useRef(0);
@@ -447,7 +451,30 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
 
       toast.success("🎉 Student registered successfully");
 
+      const schoolConcessionNames = Array.isArray(data.schoolConcessions)
+        ? data.schoolConcessions
+            .map((item: any) => item?.name)
+            .filter((name: string | undefined): name is string => Boolean(name))
+        : [];
+      const defaultConcessionType = schoolConcessionNames.find(
+        (name) => name === "NO CONCESSION"
+      );
+      const selectedConcessionType =
+        defaultConcessionType ||
+        (schoolConcessionNames.includes(data.feeStructure?.concessionType)
+          ? data.feeStructure.concessionType
+          : schoolConcessionNames[0]) ||
+        data.feeStructure?.concessionType ||
+        "";
+
       setStudentData(data);
+      setConcessionType(selectedConcessionType);
+      setConcessionAmount(
+        Number(
+          data.schoolConcessions?.find((item: any) => item?.name === selectedConcessionType)
+            ?.maxConcessionAmount ?? 0
+        )
+      );
       setIsRegistered(true);
 
       // Set the generated admission number in the form
@@ -477,7 +504,8 @@ const handleFeeSubmit = async () => {
       enrollmentId: studentData.enrollmentId, // confirm if correct
       academicYearId: studentData.feeStructure.academicYearId,
       feeStructureId: studentData.feeStructure.id,
-      discountPercentage: discountPercent,
+      discountPercentage: 0,
+      concessionAmount,
     };
 
     // ========== DEBUG LOGS ==========
@@ -490,7 +518,8 @@ const handleFeeSubmit = async () => {
     console.log("  - enrollmentId (admissionClassId):", studentData.enrollmentId);
     console.log("  - academicYearId:", studentData.feeStructure.academicYearId);
     console.log("  - feeStructureId:", studentData.feeStructure.id);
-    console.log("  - discountPercentage:", discountPercent);
+    console.log("  - discountPercentage:", 0);
+    console.log("  - concessionAmount:", concessionAmount);
     console.log("API Endpoint:", "/api/student-fees-accounts/registerStudentFeeAccount");
     console.log("========== END DEBUG ==========");
 
@@ -553,16 +582,35 @@ const handleFeeSubmit = async () => {
       )
     : 0;
 
-  const totalDiscount = studentData
+  const totalDiscountableAmount = studentData
     ? studentData.feeStructure.items.reduce((sum: number, item: any) => {
-        if (item.isDiscountAllowed) {
-          return sum + (item.amount * discountPercent) / 100;
-        }
-        return sum;
+        return item.isDiscountAllowed ? sum + item.amount : sum;
       }, 0)
     : 0;
 
+  const totalDiscount = Math.min(Math.max(concessionAmount, 0), totalDiscountableAmount);
   const finalAmount = totalAmount - totalDiscount;
+  const installments = studentData?.installments || [];
+  const schoolConcessions = Array.isArray(studentData?.schoolConcessions)
+    ? studentData.schoolConcessions
+    : [];
+  const feeHeadFinalAmounts = studentData
+    ? studentData.feeStructure.items.reduce((acc: Record<number, number>, item: any) => {
+        const itemDiscount = item.isDiscountAllowed && totalDiscountableAmount > 0
+          ? (item.amount / totalDiscountableAmount) * totalDiscount
+          : 0;
+        acc[item.feeHeadId] = item.amount - itemDiscount;
+        return acc;
+      }, {})
+    : {};
+  const getConcessionAmountByName = (name: string, concessions: any[]) => {
+    const matchedConcession = concessions.find((item: any) => item?.name === name);
+    return Number(matchedConcession?.maxConcessionAmount ?? 0);
+  };
+  const handleConcessionTypeChange = (value: string) => {
+    setConcessionType(value);
+    setConcessionAmount(getConcessionAmountByName(value, schoolConcessions));
+  };
 
 
 
@@ -931,23 +979,25 @@ const handleFeeSubmit = async () => {
           <thead>
             <tr className="border bg-gray-100">
               <th className="p-2 border">Fee Head</th>
-              <th className="p-2 border">Amount</th>
-              <th className="p-2 border">Discount</th>
-              <th className="p-2 border">Final</th>
+              <th className="p-2 border text-right">Amount</th>
+              <th className="p-2 border text-right">Discount</th>
+              <th className="p-2 border text-right">Final</th>
             </tr>
           </thead>
 
           <tbody>
             {studentData.feeStructure.items.map((item: any) => {
-              const discount = item.isDiscountAllowed ? (item.amount * discountPercent) / 100 : 0;
+              const discount = item.isDiscountAllowed && totalDiscountableAmount > 0
+                ? (item.amount / totalDiscountableAmount) * totalDiscount
+                : 0;
               const final = item.amount - discount;
 
               return (
                 <tr key={item.feeHeadId} className="border hover:bg-gray-50">
                   <td className="p-2 border">{item.name}</td>
 
-                  <td className="p-2 border relative group cursor-pointer">
-                    ₹ {item.amount}
+                  <td className="p-2 border relative group cursor-pointer text-right">
+                    {formatINR(Number(item.amount || 0))}
                     <div className="absolute hidden group-hover:block bg-black text-white text-xs px-2 py-1 rounded -top-7 left-1/2 -translate-x-1/2">
                       {item.isDiscountAllowed
                         ? `Max Discount: ${item.maxDiscountPercentage}%`
@@ -955,45 +1005,88 @@ const handleFeeSubmit = async () => {
                     </div>
                   </td>
 
-                  <td className="p-2 border text-center">
-                    ₹ {discount.toFixed(2)}
+                  <td className="p-2 border text-right">
+                    {formatINR(discount)}
                   </td>
 
-                  <td className="p-2 border">₹ {final.toFixed(2)}</td>
+                  <td className="p-2 border text-right">{formatINR(final)}</td>
                 </tr>
               );
             })}
+            <tr className="border bg-gray-100 font-semibold">
+              <td className="p-2 border">Total</td>
+              <td className="p-2 border text-right">{formatINR(totalAmount)}</td>
+              <td className="p-2 border text-right">{formatINR(totalDiscount)}</td>
+              <td className="p-2 border text-right">{formatINR(finalAmount)}</td>
+            </tr>
           </tbody>
         </table>
 
-        <p className="text-right font-bold mt-2">
-          Total: ₹ {totalAmount.toFixed(2)}
+        <p className="hidden">
+          Total: {formatINR(totalAmount)}
         </p>
 
         {!isFeeSubmitted && (
           <>
-            <div className="text-right text-red-500 flex items-center justify-end gap-3">
-              <span>Discount %</span>
-              <Input
-                type="number"
-                min={0}
-                max={100}
-                step={0.01}
-                className="w-24"
-                value={discountPercent}
-                onChange={(e) => {
-                  const val = parseFloat(e.target.value);
-                  setDiscountPercent(isNaN(val) ? 0 : Math.min(Math.max(val, 0), 100));
-                }}
-              />
+            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_auto] items-end gap-3">
+              <div className="min-w-0 space-y-1 text-slate-700">
+                <span className="block text-sm">Concession Type</span>
+                <Select value={concessionType || undefined} onValueChange={handleConcessionTypeChange}>
+                  <SelectTrigger className="w-full bg-white text-black">
+                    <SelectValue placeholder="Concession Type" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {schoolConcessions.map((item: any) => (
+                      <SelectItem key={item.id} value={item.name}>
+                        {item.name}
+                      </SelectItem>
+                    ))}
+                    {schoolConcessions.length === 0 && concessionType ? (
+                      <SelectItem value={concessionType}>{concessionType}</SelectItem>
+                    ) : null}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="min-w-0 space-y-1 text-slate-700">
+                <span className="block text-sm">Concession Reference</span>
+                <Select value={concessionReference || undefined} onValueChange={setConcessionReference}>
+                  <SelectTrigger className="w-full bg-white text-black">
+                    <SelectValue placeholder="Select Reference" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="Annappa">Annappa</SelectItem>
+                    <SelectItem value="Nagaraj">Nagaraj</SelectItem>
+                    <SelectItem value="Devaraj">Devaraj</SelectItem>
+                    <SelectItem value="Sunil">Sunil</SelectItem>
+                    <SelectItem value="Principal">Principal</SelectItem>
+                    <SelectItem value="Vice-Principal">Vice-Principal</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div className="w-32 space-y-1 text-red-500">
+                <span className="block text-sm">Concession Amount</span>
+                <Input
+                  type="number"
+                  min={0}
+                  step={0.01}
+                  className="w-full"
+                  value={concessionAmount}
+                  onChange={(e) => {
+                    const val = parseFloat(e.target.value);
+                    setConcessionAmount(isNaN(val) ? 0 : Math.max(val, 0));
+                  }}
+                />
+              </div>
             </div>
 
-            <p className="text-right text-red-500">
-              Discount: ₹ {totalDiscount.toFixed(2)}
+            <p className="hidden">
+              Discount: {formatINR(totalDiscount)}
             </p>
 
             <p className="text-right font-bold text-green-600">
-              Final: ₹ {finalAmount.toFixed(2)}
+              Final: {formatINR(finalAmount)}
             </p>
 
             <div className="flex justify-end mt-4">
@@ -1010,7 +1103,88 @@ const handleFeeSubmit = async () => {
         {isFeeSubmitted && (
           <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center">
             <p className="text-green-700 font-semibold">✅ Fee Finalized Successfully</p>
-            <p className="text-green-600 text-sm mt-1">Final Amount: ₹ {finalAmount.toFixed(2)}</p>
+            <p className="text-green-600 text-sm mt-1">Final Amount: {formatINR(finalAmount)}</p>
+          </div>
+        )}
+        {installments.length > 0 && (
+          <div className="space-y-3 pt-2">
+            <h3 className="text-base font-semibold">Installments</h3>
+
+            <table className="w-full border">
+              <thead>
+                <tr className="border bg-gray-100">
+                  <th className="p-2 border text-left">Installment</th>
+                  <th className="p-2 border text-left">Due Date</th>
+                  <th className="p-2 border text-right">Amount</th>
+                  <th className="p-2 border text-center">Action</th>
+                </tr>
+              </thead>
+              <tbody>
+                {installments.map((installment: any) => {
+                  const isExpanded = expandedInstallmentId === installment.id;
+                  const recalculatedInstallmentAmount = (installment.installmentHeads || []).reduce(
+                    (sum: number, head: any) => {
+                      const feeHeadFinalAmount = Number(feeHeadFinalAmounts[head.feeHeadId] ?? head.amount ?? 0);
+                      return sum + (feeHeadFinalAmount * Number(head.percentage || 0)) / 100;
+                    },
+                    0
+                  );
+
+                  return (
+                    <Fragment key={installment.id}>
+                      <tr className="border hover:bg-gray-50">
+                        <td className="p-2 border">{installment.name}</td>
+                        <td className="p-2 border">{installment.dueDate}</td>
+                        <td className="p-2 border text-right">{formatINR(recalculatedInstallmentAmount)}</td>
+                        <td className="p-2 border text-center">
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            onClick={() => setExpandedInstallmentId(isExpanded ? null : installment.id)}
+                          >
+                            {isExpanded ? "Hide Heads" : "View Heads"}
+                          </Button>
+                        </td>
+                      </tr>
+
+                      {isExpanded && (
+                        <tr className="border bg-gray-50">
+                          <td className="p-3 border" colSpan={4}>
+                            <table className="w-full border bg-white">
+                              <thead>
+                                <tr className="border bg-slate-100">
+                                  <th className="p-2 border text-left">Fee Head</th>
+                                  <th className="p-2 border text-right">Percentage</th>
+                                  <th className="p-2 border text-right">Amount</th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {installment.installmentHeads?.map((head: any) => {
+                                  const feeHeadFinalAmount = Number(
+                                    feeHeadFinalAmounts[head.feeHeadId] ?? head.amount ?? 0
+                                  );
+                                  const recalculatedHeadAmount =
+                                    (feeHeadFinalAmount * Number(head.percentage || 0)) / 100;
+
+                                  return (
+                                    <tr key={head.id} className="border">
+                                      <td className="p-2 border">{head.feeHeadName}</td>
+                                      <td className="p-2 border text-right">{head.percentage}%</td>
+                                      <td className="p-2 border text-right">{formatINR(recalculatedHeadAmount)}</td>
+                                    </tr>
+                                  );
+                                })}
+                              </tbody>
+                            </table>
+                          </td>
+                        </tr>
+                      )}
+                    </Fragment>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </CardContent>
@@ -1022,3 +1196,6 @@ const handleFeeSubmit = async () => {
 };
 
 export default StudentForm;
+
+
+
