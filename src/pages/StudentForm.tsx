@@ -1,5 +1,5 @@
 import { useForm, useFieldArray, Controller } from "react-hook-form";
-import { Fragment, useState, useEffect, useRef } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
@@ -18,7 +18,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { formatINR } from "@/lib/utils";
+import StudentFeePreview from "@/components/StudentFeePreview";
 
 type Relation = {
   name: string;
@@ -52,21 +52,18 @@ type StudentFormValues = {
   previousClass: string;
   previousBoard: string;
   satsId: string;
+  penNo: string;
+  casteCertificateNo: string;
   relations: Relation[];
 };
 
 const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeFinalized?: (studentData: any) => void }) => {
   const [isRegistered, setIsRegistered] = useState(false);
   const [studentData, setStudentData] = useState<any>(null);
-  const [isFeeSubmitted, setIsFeeSubmitted] = useState(false);
   const [isValidatingAadhaar, setIsValidatingAadhaar] = useState(false);
   const [lastValidatedAadhaar, setLastValidatedAadhaar] = useState<string>("");
+  const [isSavingStudent, setIsSavingStudent] = useState(false);
 
-  // ✅ NEW STATES (overall discount only)
-  const [concessionAmount, setConcessionAmount] = useState<number>(0);
-  const [concessionType, setConcessionType] = useState<string>("");
-  const [concessionReference, setConcessionReference] = useState<string>("");
-  const [expandedInstallmentId, setExpandedInstallmentId] = useState<number | null>(null);
   const [academicYearName, setAcademicYearName] = useState<string>("");
   const [classes, setClasses] = useState<{ id: number; name: string }[]>([]);
   const aadhaarValidationRequestRef = useRef(0);
@@ -85,6 +82,16 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
         academicYearId: "",
         admissionDate: currentDate,
         dob: minDateString,
+        placeOfBirth: "",
+        caste: "",
+        subCaste: "",
+        category: "",
+        previousSchool: "",
+        previousClass: "",
+        previousBoard: "",
+        satsId: "",
+        penNo: "",
+        casteCertificateNo: "",
         relations: [
           {
             name: "",
@@ -365,9 +372,14 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
         throw new Error("Active academic year not found. Cannot submit student registration.");
       }
 
-      const token = localStorage.getItem("authToken");
+      const { token, schoolId } = getSessionContext();
       if (!token) {
         toast.error("Token missing. Please login again.");
+        return;
+      }
+
+      if (!schoolId) {
+        toast.error("School ID missing. Please login again.");
         return;
       }
 
@@ -376,6 +388,7 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
         return;
       }
 
+      setIsSavingStudent(true);
 
       const payload = {
         admissionNo: values.admissionNo,
@@ -399,7 +412,9 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
         previousSchool: values.previousSchool,
         previousClass: values.previousClass,
         previousBoard: values.previousBoard,
-        satsId: Number(values.satsId),
+        satsId: values.satsId?.trim() ? Number(values.satsId) : null,
+        penNo: values.penNo,
+        casteCertificateNo: values.casteCertificateNo,
         guardians: values.relations.map((r) => ({
           name: r.name,
           phone: r.contact.replace(/-/g, "").replace(/^0+/, ""),
@@ -409,7 +424,7 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
         })),
       };
 
-      const response = await fetch("/api/1/students/registerStudent", {
+      const response = await fetch(`/api/${schoolId}/students/registerStudent`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
@@ -419,62 +434,10 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
       });
 
       const data = await response.json();
-      
-      // ========== REGISTRATION RESPONSE DEBUG ==========
-      console.log("========== STUDENT REGISTRATION DEBUG ==========");
-      console.log("Response Status:", response.status, response.ok ? "OK" : "ERROR");
-      console.log("Full Response Object:", data);
-      console.log("Response Structure:");
-      console.log("  - student:", data.student);
-      console.log("  - feeStructure:", data.feeStructure);
-      if (data.enrollmentId) {
-        console.log("  - enrollmentId:", data.enrollmentId);
-      }
-      if (data.student) {
-        console.log("Student Details:");
-        console.log("    - id:", data.student.id);
-        console.log("    - name:", data.student.name);
-        console.log("    - admissionNo:", data.student.admissionNo);
-        console.log("    - admissionClassId:", data.student.admissionClassId);
-        console.log("    - schoolId:", data.student.schoolId);
-      }
-      if (data.feeStructure) {
-        console.log("Fee Structure Details:");
-        console.log("    - id:", data.feeStructure.id);
-        console.log("    - academicYearId:", data.feeStructure.academicYearId);
-        console.log("    - items count:", data.feeStructure.items?.length);
-      }
-
-      console.log("========== END REGISTRATION DEBUG ==========");
-      
       if (!response.ok) throw new Error(data.message);
 
-      toast.success("🎉 Student registered successfully");
-
-      const schoolConcessionNames = Array.isArray(data.schoolConcessions)
-        ? data.schoolConcessions
-            .map((item: any) => item?.name)
-            .filter((name: string | undefined): name is string => Boolean(name))
-        : [];
-      const defaultConcessionType = schoolConcessionNames.find(
-        (name) => name === "NO CONCESSION"
-      );
-      const selectedConcessionType =
-        defaultConcessionType ||
-        (schoolConcessionNames.includes(data.feeStructure?.concessionType)
-          ? data.feeStructure.concessionType
-          : schoolConcessionNames[0]) ||
-        data.feeStructure?.concessionType ||
-        "";
-
+      toast.success("Student registered successfully");
       setStudentData(data);
-      setConcessionType(selectedConcessionType);
-      setConcessionAmount(
-        Number(
-          data.schoolConcessions?.find((item: any) => item?.name === selectedConcessionType)
-            ?.maxConcessionAmount ?? 0
-        )
-      );
       setIsRegistered(true);
 
       // Set the generated admission number in the form
@@ -483,134 +446,114 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
       }
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Error occurred");
+    } finally {
+      setIsSavingStudent(false);
     }
   };
 
-//
-//  fee submit handler
-const handleFeeSubmit = async () => {
-  try {
-    const token = localStorage.getItem("authToken");
-    if (!token) {
-      toast.error("Token missing");
-      return;
-    }
-
-    if (!studentData) return;
-
-    const payload = {
-      schoolId: studentData.student.schoolId,
-      studentId: studentData.student.id,
-      enrollmentId: studentData.enrollmentId, // confirm if correct
-      academicYearId: studentData.feeStructure.academicYearId,
-      feeStructureId: studentData.feeStructure.id,
-      discountPercentage: 0,
-      concessionAmount,
-    };
-
-    // ========== DEBUG LOGS ==========
-    console.log("========== FEE FINALIZATION DEBUG ==========");
-    console.log("Student Data:", studentData);
-    console.log("Payload being sent to API:", payload);
-    console.log("Individual values:");
-    console.log("  - schoolId:", studentData.student.schoolId);
-    console.log("  - studentId:", studentData.student.id);
-    console.log("  - enrollmentId (admissionClassId):", studentData.enrollmentId);
-    console.log("  - academicYearId:", studentData.feeStructure.academicYearId);
-    console.log("  - feeStructureId:", studentData.feeStructure.id);
-    console.log("  - discountPercentage:", 0);
-    console.log("  - concessionAmount:", concessionAmount);
-    console.log("API Endpoint:", "/api/student-fees-accounts/registerStudentFeeAccount");
-    console.log("========== END DEBUG ==========");
-
-    const response = await fetch(
-      "/api/student-fees-accounts/registerStudentFeeAccount",
-      {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${token}`,
-        },
-        body: JSON.stringify(payload),
+  const onUpdate = async (values: StudentFormValues) => {
+    try {
+      if (!studentData?.student) {
+        toast.error("Student data missing. Please register the student first.");
+        return;
       }
-    );
 
-    const data = await response.json();
-    
-    // ========== RESPONSE LOGS ==========
-    console.log("========== API RESPONSE DEBUG ==========");
-    console.log("Response Status:", response.status, response.ok ? "OK" : "ERROR");
-    console.log("Response Data:", data);
-    console.log("studentFeeObject in response:", data?.studentFeeObject);
-    console.log("========== END RESPONSE DEBUG ==========");
-    
-    if (!response.ok) throw new Error(data.message);
+      if (!values.academicYearId) {
+        throw new Error("Active academic year not found. Cannot update student.");
+      }
 
-    toast.success("✅ Fee submitted successfully");
-    setIsFeeSubmitted(true);
+      const { token, schoolId } = getSessionContext();
+      if (!token) {
+        toast.error("Token missing. Please login again.");
+        return;
+      }
 
-    // Call onFeeFinalized callback with complete response data from API (includes studentFeeObject)
-    if (onFeeFinalized) {
-      onFeeFinalized(data);
+      if (!schoolId) {
+        toast.error("School ID missing. Please login again.");
+        return;
+      }
+
+      const isAadhaarValid = await validateAadhaarNumber(values.aadhaarNo);
+      if (!isAadhaarValid) {
+        return;
+      }
+
+      setIsSavingStudent(true);
+
+      // Backend expects same request body as registerStudent for update.
+      const payload = {
+        admissionNo: values.admissionNo,
+        academicYearId: values.academicYearId,
+        aadhaarNo: values.aadhaarNo.replace(/-/g, ""),
+        fullName: values.fullName,
+        dob: values.dob,
+        admissionDate: values.admissionDate,
+        placeOfBirth: values.placeOfBirth,
+        gender: values.gender?.toUpperCase() || "",
+        bloodGroup: values.bloodGroup,
+        religion: values.religion?.trim() || "",
+        caste: values.caste,
+        subCaste: values.subCaste,
+        category: values.category,
+        permanentAddress: values.permanentAddress,
+        currentAddress: values.currentAddress,
+        phone: values.phone.replace(/-/g, "").replace(/^0+/, ""),
+        email: values.email,
+        admissionClassId: Number(values.admissionClassId),
+        previousSchool: values.previousSchool,
+        previousClass: values.previousClass,
+        previousBoard: values.previousBoard,
+        satsId: values.satsId?.trim() ? Number(values.satsId) : null,
+        penNo: values.penNo,
+        casteCertificateNo: values.casteCertificateNo,
+        guardians: values.relations.map((r) => ({
+          name: r.name,
+          phone: r.contact.replace(/-/g, "").replace(/^0+/, ""),
+          occupation: r.occupation,
+          email: r.email || null,
+          relation: r.relation?.toUpperCase() || "",
+        })),
+      };
+
+      const response = await fetch(
+        `/api/${schoolId}/students/updateStudent`,
+        {
+          method: "PUT",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify(payload),
+        }
+      );
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(
+          data?.message ||
+            data?.error ||
+            `Failed to update student (HTTP ${response.status})`
+        );
+      }
+
+      toast.success("Student updated successfully");
+      setStudentData(data);
+
+      if (data?.student?.admissionNo) {
+        setValue("admissionNo", data.student.admissionNo);
+      }
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Update failed");
+    } finally {
+      setIsSavingStudent(false);
     }
-
-    // Close the form after 3 seconds if onClose callback is provided
-    if (onClose) {
-      setTimeout(() => {
-        onClose();
-      }, 3000);
-    }
-  } catch (error) {
-    console.error("========== ERROR DEBUG ==========");
-    console.error("Error:", error);
-    console.error("========== END ERROR DEBUG ==========");
-    toast.error(error instanceof Error ? error.message : "Submit failed");
-  }
-};
-//----
-
-
-
-
-
-
-  // ================= CALCULATIONS =================
-  const totalAmount = studentData
-    ? studentData.feeStructure.items.reduce(
-        (sum: number, item: any) => sum + item.amount,
-        0
-      )
-    : 0;
-
-  const totalDiscountableAmount = studentData
-    ? studentData.feeStructure.items.reduce((sum: number, item: any) => {
-        return item.isDiscountAllowed ? sum + item.amount : sum;
-      }, 0)
-    : 0;
-
-  const totalDiscount = Math.min(Math.max(concessionAmount, 0), totalDiscountableAmount);
-  const finalAmount = totalAmount - totalDiscount;
-  const installments = studentData?.installments || [];
-  const schoolConcessions = Array.isArray(studentData?.schoolConcessions)
-    ? studentData.schoolConcessions
-    : [];
-  const feeHeadFinalAmounts = studentData
-    ? studentData.feeStructure.items.reduce((acc: Record<number, number>, item: any) => {
-        const itemDiscount = item.isDiscountAllowed && totalDiscountableAmount > 0
-          ? (item.amount / totalDiscountableAmount) * totalDiscount
-          : 0;
-        acc[item.feeHeadId] = item.amount - itemDiscount;
-        return acc;
-      }, {})
-    : {};
-  const getConcessionAmountByName = (name: string, concessions: any[]) => {
-    const matchedConcession = concessions.find((item: any) => item?.name === name);
-    return Number(matchedConcession?.maxConcessionAmount ?? 0);
   };
-  const handleConcessionTypeChange = (value: string) => {
-    setConcessionType(value);
-    setConcessionAmount(getConcessionAmountByName(value, schoolConcessions));
-  };
+
+
+
+
+
 
 
 
@@ -715,6 +658,10 @@ const handleFeeSubmit = async () => {
                 </TooltipProvider>
                 {errors.dob && <p className="text-red-500 text-sm mt-1">{errors.dob.message}</p>}
               </div>
+              <Input
+                {...register("placeOfBirth")}
+                placeholder="Place of Birth"
+              />
               <Controller
                 name="gender"
                 control={control}
@@ -797,6 +744,86 @@ const handleFeeSubmit = async () => {
                     </SelectContent>
                   </Select>
                 )}
+              />
+              <Input {...register("caste")} placeholder="Caste" />
+              <Input {...register("subCaste")} placeholder="Sub Caste" />
+              <Input {...register("category")} placeholder="Category" />
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Previous School details */}
+        <Card>
+          <CardContent className="p-6 space-y-4">
+            <h2 className="text-lg font-semibold">Previous School details</h2>
+            <div className="grid md:grid-cols-2 gap-4">
+              <div>
+                <Input
+                  {...register("previousSchool", {
+                    maxLength: {
+                      value: 100,
+                      message: "School Name must be at most 100 characters",
+                    },
+                  })}
+                  placeholder="School Name"
+                  maxLength={100}
+                  className={errors.previousSchool ? "border-red-500" : ""}
+                />
+                {errors.previousSchool && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.previousSchool.message}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Input
+                  {...register("previousClass", {
+                    maxLength: {
+                      value: 10,
+                      message: "Class must be at most 10 characters",
+                    },
+                  })}
+                  placeholder="Class"
+                  maxLength={10}
+                  className={errors.previousClass ? "border-red-500" : ""}
+                />
+                {errors.previousClass && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.previousClass.message}
+                  </p>
+                )}
+              </div>
+              <div>
+                <Input
+                  {...register("previousBoard", {
+                    maxLength: {
+                      value: 100,
+                      message: "Board must be at most 100 characters",
+                    },
+                  })}
+                  placeholder="Board"
+                  maxLength={100}
+                  className={errors.previousBoard ? "border-red-500" : ""}
+                />
+                {errors.previousBoard && (
+                  <p className="text-red-500 text-sm mt-1">
+                    {errors.previousBoard.message}
+                  </p>
+                )}
+              </div>
+              <Input
+                {...register("satsId")}
+                placeholder="SATS NO"
+                inputMode="numeric"
+                onInput={(e) => {
+                  // Keep SATS as digits-only; payload converts to number/null.
+                  e.currentTarget.value = e.currentTarget.value.replace(/\D/g, "");
+                }}
+              />
+              <Input {...register("penNo")} placeholder="PEN NO" />
+              <Input
+                {...register("casteCertificateNo")}
+                placeholder="CasteCertificateNo"
               />
             </div>
           </CardContent>
@@ -941,256 +968,52 @@ const handleFeeSubmit = async () => {
 
         {/* Submit */}
         <div className="flex justify-end gap-4">
-          <Button
-            type="submit"
-            className="px-8"
-            disabled={isValidatingAadhaar || (!!aadhaarNo && !!errors.aadhaarNo)}
-          >
-            {isValidatingAadhaar ? "Validating Aadhaar..." : "Register Student"}
-          </Button>
+          {!isRegistered ? (
+            <Button
+              type="submit"
+              className="px-8"
+              disabled={
+                isSavingStudent ||
+                isValidatingAadhaar ||
+                (!!aadhaarNo && !!errors.aadhaarNo)
+              }
+            >
+              {isSavingStudent
+                ? "Registering..."
+                : isValidatingAadhaar
+                  ? "Validating Aadhaar..."
+                  : "Register Student"}
+            </Button>
+          ) : (
+            <Button
+              type="button"
+              className="px-8"
+              onClick={handleSubmit(onUpdate)}
+              disabled={
+                isSavingStudent ||
+                isValidatingAadhaar ||
+                (!!aadhaarNo && !!errors.aadhaarNo)
+              }
+            >
+              {isSavingStudent
+                ? "Updating..."
+                : isValidatingAadhaar
+                  ? "Validating Aadhaar..."
+                  : "Update Student"}
+            </Button>
+          )}
         </div>
       </form>
 
       {/* ---- RIGHT: Fee Preview ---- */}
       {isRegistered && studentData && (
-  <div className="w-1/2 transition-all duration-500 space-y-4">
-    {/* Congratulations Message - Only after fee finalization */}
-    {isFeeSubmitted && (
-      <Card className="bg-gradient-to-r from-green-50 to-emerald-50 border-green-300">
-        <CardContent className="p-6">
-          <div className="flex items-center gap-3">
-            <span className="text-4xl">🎉</span>
-            <div>
-              <h3 className="text-lg font-bold text-green-700">Congratulations!</h3>
-              <p className="text-sm text-green-600">Student admission completed successfully</p>
-              <p className="text-xs text-green-700 mt-1">{studentData.student.fullName} has been registered and fee finalized</p>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    )}
-
-    {/* Fee Structure Card */}
-    <Card>
-      <CardContent className="p-6 space-y-4">
-        <h2 className="text-lg font-semibold">Fee Preview</h2>
-
-        <table className="w-full border mt-4">
-          <thead>
-            <tr className="border bg-gray-100">
-              <th className="p-2 border">Fee Head</th>
-              <th className="p-2 border text-right">Amount</th>
-              <th className="p-2 border text-right">Discount</th>
-              <th className="p-2 border text-right">Final</th>
-            </tr>
-          </thead>
-
-          <tbody>
-            {studentData.feeStructure.items.map((item: any) => {
-              const discount = item.isDiscountAllowed && totalDiscountableAmount > 0
-                ? (item.amount / totalDiscountableAmount) * totalDiscount
-                : 0;
-              const final = item.amount - discount;
-
-              return (
-                <tr key={item.feeHeadId} className="border hover:bg-gray-50">
-                  <td className="p-2 border">{item.name}</td>
-
-                  <td className="p-2 border relative group cursor-pointer text-right">
-                    {formatINR(Number(item.amount || 0))}
-                    <div className="absolute hidden group-hover:block bg-black text-white text-xs px-2 py-1 rounded -top-7 left-1/2 -translate-x-1/2">
-                      {item.isDiscountAllowed
-                        ? `Max Discount: ${item.maxDiscountPercentage}%`
-                        : "Discount not applicable for this fee"}
-                    </div>
-                  </td>
-
-                  <td className="p-2 border text-right">
-                    {formatINR(discount)}
-                  </td>
-
-                  <td className="p-2 border text-right">{formatINR(final)}</td>
-                </tr>
-              );
-            })}
-            <tr className="border bg-gray-100 font-semibold">
-              <td className="p-2 border">Total</td>
-              <td className="p-2 border text-right">{formatINR(totalAmount)}</td>
-              <td className="p-2 border text-right">{formatINR(totalDiscount)}</td>
-              <td className="p-2 border text-right">{formatINR(finalAmount)}</td>
-            </tr>
-          </tbody>
-        </table>
-
-        <p className="hidden">
-          Total: {formatINR(totalAmount)}
-        </p>
-
-        {!isFeeSubmitted && (
-          <>
-            <div className="grid grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)_auto] items-end gap-3">
-              <div className="min-w-0 space-y-1 text-slate-700">
-                <span className="block text-sm">Concession Type</span>
-                <Select value={concessionType || undefined} onValueChange={handleConcessionTypeChange}>
-                  <SelectTrigger className="w-full bg-white text-black">
-                    <SelectValue placeholder="Concession Type" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {schoolConcessions.map((item: any) => (
-                      <SelectItem key={item.id} value={item.name}>
-                        {item.name}
-                      </SelectItem>
-                    ))}
-                    {schoolConcessions.length === 0 && concessionType ? (
-                      <SelectItem value={concessionType}>{concessionType}</SelectItem>
-                    ) : null}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="min-w-0 space-y-1 text-slate-700">
-                <span className="block text-sm">Concession Reference</span>
-                <Select value={concessionReference || undefined} onValueChange={setConcessionReference}>
-                  <SelectTrigger className="w-full bg-white text-black">
-                    <SelectValue placeholder="Select Reference" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="Annappa">Annappa</SelectItem>
-                    <SelectItem value="Nagaraj">Nagaraj</SelectItem>
-                    <SelectItem value="Devaraj">Devaraj</SelectItem>
-                    <SelectItem value="Sunil">Sunil</SelectItem>
-                    <SelectItem value="Principal">Principal</SelectItem>
-                    <SelectItem value="Vice-Principal">Vice-Principal</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div className="w-32 space-y-1 text-red-500">
-                <span className="block text-sm">Concession Amount</span>
-                <Input
-                  type="number"
-                  min={0}
-                  step={0.01}
-                  className="w-full"
-                  value={concessionAmount}
-                  onChange={(e) => {
-                    const val = parseFloat(e.target.value);
-                    setConcessionAmount(isNaN(val) ? 0 : Math.max(val, 0));
-                  }}
-                />
-              </div>
-            </div>
-
-            <p className="hidden">
-              Discount: {formatINR(totalDiscount)}
-            </p>
-
-            <p className="text-right font-bold text-green-600">
-              Final: {formatINR(finalAmount)}
-            </p>
-
-            <div className="flex justify-end mt-4">
-              <Button
-                className="bg-green-600 hover:bg-green-700 text-white px-6"
-                onClick={handleFeeSubmit}
-              >
-                Finalise Fee
-              </Button>
-            </div>
-          </>
-        )}
-
-        {isFeeSubmitted && (
-          <div className="p-4 bg-green-50 border border-green-200 rounded-lg text-center">
-            <p className="text-green-700 font-semibold">✅ Fee Finalized Successfully</p>
-            <p className="text-green-600 text-sm mt-1">Final Amount: {formatINR(finalAmount)}</p>
-          </div>
-        )}
-        {installments.length > 0 && (
-          <div className="space-y-3 pt-2">
-            <h3 className="text-base font-semibold">Installments</h3>
-
-            <table className="w-full border">
-              <thead>
-                <tr className="border bg-gray-100">
-                  <th className="p-2 border text-left">Installment</th>
-                  <th className="p-2 border text-left">Due Date</th>
-                  <th className="p-2 border text-right">Amount</th>
-                  <th className="p-2 border text-center">Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {installments.map((installment: any) => {
-                  const isExpanded = expandedInstallmentId === installment.id;
-                  const recalculatedInstallmentAmount = (installment.installmentHeads || []).reduce(
-                    (sum: number, head: any) => {
-                      const feeHeadFinalAmount = Number(feeHeadFinalAmounts[head.feeHeadId] ?? head.amount ?? 0);
-                      return sum + (feeHeadFinalAmount * Number(head.percentage || 0)) / 100;
-                    },
-                    0
-                  );
-
-                  return (
-                    <Fragment key={installment.id}>
-                      <tr className="border hover:bg-gray-50">
-                        <td className="p-2 border">{installment.name}</td>
-                        <td className="p-2 border">{installment.dueDate}</td>
-                        <td className="p-2 border text-right">{formatINR(recalculatedInstallmentAmount)}</td>
-                        <td className="p-2 border text-center">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => setExpandedInstallmentId(isExpanded ? null : installment.id)}
-                          >
-                            {isExpanded ? "Hide Heads" : "View Heads"}
-                          </Button>
-                        </td>
-                      </tr>
-
-                      {isExpanded && (
-                        <tr className="border bg-gray-50">
-                          <td className="p-3 border" colSpan={4}>
-                            <table className="w-full border bg-white">
-                              <thead>
-                                <tr className="border bg-slate-100">
-                                  <th className="p-2 border text-left">Fee Head</th>
-                                  <th className="p-2 border text-right">Percentage</th>
-                                  <th className="p-2 border text-right">Amount</th>
-                                </tr>
-                              </thead>
-                              <tbody>
-                                {installment.installmentHeads?.map((head: any) => {
-                                  const feeHeadFinalAmount = Number(
-                                    feeHeadFinalAmounts[head.feeHeadId] ?? head.amount ?? 0
-                                  );
-                                  const recalculatedHeadAmount =
-                                    (feeHeadFinalAmount * Number(head.percentage || 0)) / 100;
-
-                                  return (
-                                    <tr key={head.id} className="border">
-                                      <td className="p-2 border">{head.feeHeadName}</td>
-                                      <td className="p-2 border text-right">{head.percentage}%</td>
-                                      <td className="p-2 border text-right">{formatINR(recalculatedHeadAmount)}</td>
-                                    </tr>
-                                  );
-                                })}
-                              </tbody>
-                            </table>
-                          </td>
-                        </tr>
-                      )}
-                    </Fragment>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </CardContent>
-    </Card>
-  </div>
-)}
+        <div className="w-1/2 transition-all duration-500">
+          <StudentFeePreview
+            studentData={studentData}
+            onFeeFinalized={onFeeFinalized}
+          />
+        </div>
+      )}
     </div>
   );
 };

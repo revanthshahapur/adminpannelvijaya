@@ -20,6 +20,7 @@ import Settings from "./pages/Settings";
 import Notifications from "./pages/Notifications";
 import FeeManagement from "./pages/FeeManagement";
 import Expenses from "./pages/Expenses";
+import RegistrationPreview from "./pages/RegistrationPreview";
 
 
 const queryClient = new QueryClient();
@@ -68,6 +69,7 @@ const App = () => {
               <Route path="students/new" element={<StudentForm />} />
               <Route path="students/:id" element={<StudentView />} />
               <Route path="students/:id/edit" element={<StudentForm />} />
+              <Route path="registration-preview/:studentId" element={<RegistrationPreview />} />
 
               {/* Other Modules */}
               <Route path="faculty" element={<Faculty />} />

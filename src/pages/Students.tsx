@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Plus, Search, X } from 'lucide-react';
@@ -269,7 +269,15 @@ const Students = () => {
               <div className="text-amber-600 mt-0.5">⚠️</div>
               <div>
                 <p className="font-semibold text-amber-900">Fee Not Finalized</p>
-                <p className="text-sm text-amber-800">Fee is not finalized for this student. Please complete the fee registration to view fee details.</p>
+                <p className="text-sm text-amber-800">
+                  Fee is not finalized for this student. Please complete the fee registration to view fee details.{" "}
+                  <Link
+                    to={`/registration-preview/${selectedStudent.studentId}`}
+                    className="font-medium underline underline-offset-2 hover:text-amber-900"
+                  >
+                    Finalize fee
+                  </Link>
+                </p>
               </div>
             </div>
           )}
@@ -465,10 +473,6 @@ const Students = () => {
                 onClose={() => {
                   setShowAddForm(false);
                   setSearch('');
-                }}
-                onFeeFinalized={(studentData) => {
-                  setSelectedStudent(studentData);
-                  setShowAddForm(false);
                 }}
               />
             </CardContent>

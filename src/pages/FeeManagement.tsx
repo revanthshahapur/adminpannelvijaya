@@ -25,7 +25,14 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/accordion";
 import { Loader, Printer } from "lucide-react";
+import svpsLogoUrl from "../assets/SVPS-logo.png";
 import { toast } from "sonner";
 import { formatINR } from '@/lib/utils';
 
@@ -68,7 +75,26 @@ type StudentFeeItem = {
   originalAmount: number;
   concessionAmount: number;
   payableAmount: number;
-  amountPaid: number;
+  amountPaid: number | null;
+};
+
+type StudentFeeInstallmentHead = {
+  id: number;
+  feeHeadId: number;
+  payableAmount: number;
+};
+
+type StudentFeeInstallment = {
+  id: number;
+  schoolId: number;
+  installmentId: number;
+  installmentName?: string;
+  seqNo?: number;
+  academicYearId: number;
+  amount: number;
+  paidAmount?: number;
+  paymentStatus?: string;
+  studentFeeInstallmentHeads: StudentFeeInstallmentHead[];
 };
 
 type FeeSummaryResponse = {
@@ -76,8 +102,13 @@ type FeeSummaryResponse = {
   studentId: number;
   schoolId: number;
   totalAmount: number;
+  // Backend returns payableAmount at the top level; use this for Fee Summary Total Amount display.
+  payableAmount?: number;
   totalAmountPaid: number;
   studentFeeItems: StudentFeeItem[];
+  studentFeeInstallments?: StudentFeeInstallment[];
+  // Some backend versions use "entitlements" for installments.
+  entitlements?: StudentFeeInstallment[];
 };
 
 const FeeManagement = () => {
@@ -87,30 +118,78 @@ const FeeManagement = () => {
   const [student, setStudent] = useState<StudentSearchResult | null>(null);
   const [paymentData, setPaymentData] = useState<PaymentResponse | null>(null);
   const [feeSummary, setFeeSummary] = useState<FeeSummaryResponse | null>(null);
-  const [enteredAmounts, setEnteredAmounts] = useState<Record<number, string>>({});
-  const [paymentMode, setPaymentMode] = useState("CASH");
-  const [gatewayTransactionId, setGatewayTransactionId] = useState("");
   const [paymentLoading, setPaymentLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
   const [receiptOpen, setReceiptOpen] = useState(false);
   const [receiptLoading, setReceiptLoading] = useState(false);
   const [receiptDetails, setReceiptDetails] = useState<PaymentReceiptDetails | null>(null);
+  const [installmentPaymentOpen, setInstallmentPaymentOpen] = useState(false);
+  const [selectedInstallment, setSelectedInstallment] = useState<StudentFeeInstallment | null>(null);
+  const [paymentMode, setPaymentMode] = useState("CASH");
+  const [gatewayTransactionId, setGatewayTransactionId] = useState("");
   const trimmedSearch = search.trim();
 
   const paymentSummaries = Array.isArray(paymentData?.data) ? paymentData.data : [];
 
-  const enteredTotal = feeSummary
-    ? feeSummary.studentFeeItems.reduce((sum, item) => {
-        const value = Number.parseFloat(enteredAmounts[item.feeHeadId] || "0");
-        return sum + (Number.isFinite(value) ? value : 0);
-      }, 0)
-    : 0;
+  const totalPayableAmount = feeSummary ? Number(feeSummary.payableAmount ?? 0) : 0;
 
-  const totalAmountDue = feeSummary
-    ? feeSummary.totalAmount - feeSummary.totalAmountPaid
-    : 0;
+  const totalAmountDue = feeSummary ? totalPayableAmount - feeSummary.totalAmountPaid : 0;
 
   const formatCurrency = (amount: number) => formatINR(amount);
+
+  const normalizeFeeSummary = (payload: unknown): FeeSummaryResponse => {
+    const raw = (payload ?? {}) as Record<string, unknown>;
+    const payableAmount = Number(raw.payableAmount ?? 0);
+    const normalizedPayableAmount = Number.isFinite(payableAmount) ? payableAmount : 0;
+
+    return {
+      ...(raw as unknown as FeeSummaryResponse),
+      payableAmount: normalizedPayableAmount,
+    };
+  };
+
+  const feeItemTotals = feeSummary
+    ? feeSummary.studentFeeItems.reduce(
+        (acc, item) => {
+          acc.originalAmount += Number(item.originalAmount ?? 0);
+          acc.concessionAmount += Number(item.concessionAmount ?? 0);
+          acc.payableAmount += Number(item.payableAmount ?? 0);
+          acc.amountPaid += Number(item.amountPaid ?? 0);
+          return acc;
+        },
+        { originalAmount: 0, concessionAmount: 0, payableAmount: 0, amountPaid: 0 },
+      )
+    : { originalAmount: 0, concessionAmount: 0, payableAmount: 0, amountPaid: 0 };
+
+  const feeHeadNameById = feeSummary
+    ? feeSummary.studentFeeItems.reduce<Record<number, string>>((acc, item) => {
+        acc[item.feeHeadId] = item.feeHeadName;
+        return acc;
+      }, {})
+    : {};
+
+  const studentFeeInstallmentsRaw = Array.isArray(feeSummary?.studentFeeInstallments)
+    ? feeSummary.studentFeeInstallments
+    : Array.isArray(feeSummary?.entitlements)
+      ? feeSummary.entitlements
+      : [];
+
+  const studentFeeInstallments = [...studentFeeInstallmentsRaw].sort((a, b) => {
+    const aSeq = Number(a.seqNo);
+    const bSeq = Number(b.seqNo);
+    const aHasSeq = Number.isFinite(aSeq);
+    const bHasSeq = Number.isFinite(bSeq);
+
+    if (aHasSeq && bHasSeq) return aSeq - bSeq;
+    if (aHasSeq) return -1;
+    if (bHasSeq) return 1;
+    return a.installmentId - b.installmentId;
+  });
+
+  const nextPayableInstallment =
+    studentFeeInstallments.find(
+      (installment) => String(installment.paymentStatus ?? "").toUpperCase() !== "COMPLETE",
+    ) ?? null;
 
   const formatDisplayDate = (value: string) => {
     if (!value) {
@@ -245,7 +324,8 @@ const FeeManagement = () => {
       setSearch("");
       setPaymentData(null);
       setFeeSummary(null);
-      setEnteredAmounts({});
+      setInstallmentPaymentOpen(false);
+      setSelectedInstallment(null);
       setPaymentMode("CASH");
       setGatewayTransactionId("");
 
@@ -301,18 +381,6 @@ const FeeManagement = () => {
     } finally {
       setPaymentLoading(false);
     }
-  };
-
-  const handleAmountChange = (feeHeadId: number, value: string) => {
-    const sanitizedValue = value.replace(/[^\d.]/g, "");
-    const parts = sanitizedValue.split(".");
-    const normalizedValue =
-      parts.length > 2 ? `${parts[0]}.${parts.slice(1).join("")}` : sanitizedValue;
-
-    setEnteredAmounts((current) => ({
-      ...current,
-      [feeHeadId]: normalizedValue,
-    }));
   };
 
   const handleOpenReceipt = async (receiptNumber: number) => {
@@ -380,7 +448,9 @@ const FeeManagement = () => {
           <style>
             body { font-family: Arial, sans-serif; margin: 24px; color: #0f172a; }
             .receipt { border: 2px solid #1e293b; padding: 24px; max-width: 760px; margin: 0 auto; }
-            .header { text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 16px; margin-bottom: 20px; }
+            .header { position: relative; text-align: center; border-bottom: 2px solid #cbd5e1; padding-bottom: 16px; margin-bottom: 20px; min-height: 72px; }
+            .logo { position: absolute; left: 0; top: 50%; transform: translateY(-50%); }
+            .logo img { width: 64px; height: auto; object-fit: contain; display: block; }
             .title { font-size: 28px; font-weight: 700; letter-spacing: 0.08em; text-transform: uppercase; }
             .subtitle { font-size: 13px; color: #475569; margin-top: 8px; }
             .meta { display: table; width: 100%; margin-bottom: 20px; }
@@ -397,6 +467,9 @@ const FeeManagement = () => {
         <body>
           <div class="receipt">
             <div class="header">
+              <div class="logo">
+                <img src="${svpsLogoUrl}" alt="SVPS Logo" />
+              </div>
               <div class="title">${getSchoolDisplayName()}</div>
               <div class="subtitle">Official Fee Payment Receipt</div>
             </div>
@@ -452,24 +525,37 @@ const FeeManagement = () => {
     printWindow.print();
   };
 
-  const handleMakePayment = async () => {
+  const handleConfirmInstallmentPayment = async () => {
     if (!feeSummary || !student) {
       toast.error("Student fee summary is not available.");
       return;
     }
 
-    const feeHeads = feeSummary.studentFeeItems
-      .map((item) => {
-        const amount = Number.parseFloat(enteredAmounts[item.feeHeadId] || "0");
-        return {
-          feeHeadId: item.feeHeadId,
-          amount,
-        };
-      })
-      .filter((item) => Number.isFinite(item.amount) && item.amount > 0);
+    if (!selectedInstallment) {
+      toast.error("Select an installment to pay.");
+      return;
+    }
+    if (String(selectedInstallment.paymentStatus ?? "").toUpperCase() === "COMPLETE") {
+      toast.error("This installment is already paid.");
+      return;
+    }
+    if (nextPayableInstallment && selectedInstallment.id !== nextPayableInstallment.id) {
+      toast.error("Please pay installments in sequence.");
+      return;
+    }
+
+    const feeHeads = (Array.isArray(selectedInstallment.studentFeeInstallmentHeads)
+      ? selectedInstallment.studentFeeInstallmentHeads
+      : []
+    )
+      .map((head) => ({
+        feeHeadId: head.feeHeadId,
+        amount: Number(head.payableAmount || 0),
+      }))
+      .filter((head) => Number.isFinite(head.amount) && head.amount > 0);
 
     if (feeHeads.length === 0) {
-      toast.error("Enter at least one fee head amount.");
+      toast.error("No payable fee heads found for this installment.");
       return;
     }
 
@@ -490,7 +576,13 @@ const FeeManagement = () => {
       return;
     }
 
-    const amount = feeHeads.reduce((sum, item) => sum + item.amount, 0);
+    const amount = Number(selectedInstallment.amount || 0);
+    const installmentId = Number(selectedInstallment.installmentId);
+
+    if (!Number.isFinite(installmentId) || installmentId <= 0) {
+      toast.error("Installment ID is missing.");
+      return;
+    }
 
     try {
       setSubmitLoading(true);
@@ -504,6 +596,7 @@ const FeeManagement = () => {
         body: JSON.stringify({
           schoolId: Number(schoolId),
           studentFeeAccountId: feeSummary.studentAccountId,
+          installmentId,
           amount,
           paymentMode,
           gatewayTransactionId: gatewayTransactionId.trim() || null,
@@ -519,6 +612,10 @@ const FeeManagement = () => {
       }
 
       toast.success(payload.message || "Payment submitted successfully");
+      setInstallmentPaymentOpen(false);
+      setSelectedInstallment(null);
+      setGatewayTransactionId("");
+      setPaymentMode("CASH");
       await handleSelectStudent(student);
     } catch (error) {
       console.error("Error making payment:", error);
@@ -530,6 +627,81 @@ const FeeManagement = () => {
 
   return (
     <div className="space-y-6 p-6">
+      <Dialog
+        open={installmentPaymentOpen}
+        onOpenChange={(open) => {
+          setInstallmentPaymentOpen(open);
+          if (!open) {
+            setSelectedInstallment(null);
+            setGatewayTransactionId("");
+            setPaymentMode("CASH");
+          }
+        }}
+      >
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Make Installment Payment</DialogTitle>
+            <DialogDescription>
+              {student ? `${student.name} (${student.admissionNo})` : "Student"}
+              {selectedInstallment
+                ? ` - ${selectedInstallment.installmentName || `Installment ${selectedInstallment.installmentId}`}`
+                : ""}
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="space-y-4">
+            <div className="rounded-md border bg-slate-50 p-3">
+              <p className="text-sm text-slate-600">Installment Amount</p>
+              <p className="mt-1 text-xl font-semibold text-slate-900">
+                {formatCurrency(selectedInstallment?.amount ?? 0)}
+              </p>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="installment-payment-mode">Payment Mode</Label>
+              <Select value={paymentMode} onValueChange={setPaymentMode}>
+                <SelectTrigger id="installment-payment-mode">
+                  <SelectValue placeholder="Select payment mode" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="CASH">CASH</SelectItem>
+                  <SelectItem value="BANK-TRANSFER">BANK-TRANSFER</SelectItem>
+                  <SelectItem value="UPI">UPI</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="space-y-2">
+              <Label htmlFor="installment-gateway-transaction-id">Gateway Transaction ID</Label>
+              <Input
+                id="installment-gateway-transaction-id"
+                value={gatewayTransactionId}
+                onChange={(e) => setGatewayTransactionId(e.target.value)}
+                placeholder="Enter transaction ID"
+              />
+            </div>
+
+            <div className="flex justify-end gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setInstallmentPaymentOpen(false)}
+                disabled={submitLoading}
+              >
+                Cancel
+              </Button>
+              <Button
+                type="button"
+                onClick={() => void handleConfirmInstallmentPayment()}
+                disabled={submitLoading || !selectedInstallment}
+              >
+                {submitLoading ? "Making Payment..." : "Confirm Payment"}
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <Dialog
         open={receiptOpen}
         onOpenChange={(open) => {
@@ -728,25 +900,25 @@ const FeeManagement = () => {
                   <div className="rounded-lg border bg-slate-50 p-4">
                     <p className="text-sm text-slate-600">Total Amount</p>
                     <p className="mt-1 text-2xl font-semibold text-slate-900">
-                      {feeSummary.totalAmount}
+                      {formatCurrency(totalPayableAmount)}
                     </p>
                   </div>
                   <div className="rounded-lg border bg-emerald-50 p-4">
                     <p className="text-sm text-emerald-700">Total Amount Paid</p>
                     <p className="mt-1 text-2xl font-semibold text-emerald-900">
-                      {feeSummary.totalAmountPaid}
+                      {formatCurrency(feeSummary.totalAmountPaid)}
                     </p>
                   </div>
                   <div className="rounded-lg border bg-amber-50 p-4">
                     <p className="text-sm text-amber-700">Total Amount Due</p>
                     <p className="mt-1 text-2xl font-semibold text-amber-900">
-                      {totalAmountDue}
+                      {formatCurrency(totalAmountDue)}
                     </p>
                   </div>
                 </div>
 
                 {feeSummary.studentFeeItems.length > 0 ? (
-                  <div className="grid gap-4 lg:grid-cols-[minmax(0,4fr)_minmax(260px,1.4fr)]">
+                  <div className="overflow-x-auto rounded-md border">
                     <Table>
                       <TableHeader>
                         <TableRow>
@@ -761,81 +933,23 @@ const FeeManagement = () => {
                         {feeSummary.studentFeeItems.map((item, index) => (
                           <TableRow key={`${item.feeHeadName}-${index}`}>
                             <TableCell>{item.feeHeadName}</TableCell>
-                            <TableCell className="text-right">{item.originalAmount}</TableCell>
-                            <TableCell className="text-right">{item.concessionAmount}</TableCell>
-                            <TableCell className="text-right">{item.payableAmount}</TableCell>
-                            <TableCell className="text-right">{item.amountPaid}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.originalAmount)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.concessionAmount)}</TableCell>
+                            <TableCell className="text-right">{formatCurrency(item.payableAmount)}</TableCell>
+                            <TableCell className="text-right">
+                              {typeof item.amountPaid === "number" ? formatCurrency(item.amountPaid) : "-"}
+                            </TableCell>
                           </TableRow>
                         ))}
+                        <TableRow className="bg-slate-50 font-bold">
+                          <TableCell>Total</TableCell>
+                          <TableCell className="text-right">{formatCurrency(feeItemTotals.originalAmount)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(feeItemTotals.concessionAmount)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(feeItemTotals.payableAmount)}</TableCell>
+                          <TableCell className="text-right">{formatCurrency(feeItemTotals.amountPaid)}</TableCell>
+                        </TableRow>
                       </TableBody>
                     </Table>
-
-                    <form
-                      className="rounded-lg border bg-slate-50 p-4"
-                      onSubmit={(e) => {
-                        e.preventDefault();
-                        void handleMakePayment();
-                      }}
-                    >
-                      <div className="border-b pb-3">
-                        <h4 className="font-medium">Amount</h4>
-                      </div>
-
-                      <div className="space-y-3 pt-4">
-                        {feeSummary.studentFeeItems.map((item) => (
-                          <div key={item.feeHeadId} className="space-y-1">
-                            <p className="text-sm text-slate-600">{item.feeHeadName}</p>
-                            <div className="flex items-center rounded-md border bg-white px-3">
-                              <span className="pr-2 text-sm text-slate-500">₹</span>
-                              <Input
-                                value={enteredAmounts[item.feeHeadId] ?? ""}
-                                onChange={(e) => handleAmountChange(item.feeHeadId, e.target.value)}
-                                inputMode="decimal"
-                                placeholder="0"
-                                className="border-0 px-0 shadow-none focus-visible:ring-0"
-                              />
-                            </div>
-                          </div>
-                        ))}
-                      </div>
-
-                      <div className="mt-4 border-t pt-4">
-                        <p className="text-sm text-slate-600">Total Amount</p>
-                        <div className="mt-2 flex items-center rounded-md border bg-slate-100 px-3 py-2">
-                          <span className="pr-2 text-sm text-slate-500">₹</span>
-                          <span className="font-medium text-slate-900">
-                            {enteredTotal.toFixed(2)}
-                          </span>
-                        </div>
-                      </div>
-                      <div className="mt-4 space-y-3 border-t pt-4">
-                        <div className="space-y-2">
-                          <Label htmlFor="payment-mode">Payment Mode</Label>
-                          <Select value={paymentMode} onValueChange={setPaymentMode}>
-                            <SelectTrigger id="payment-mode">
-                              <SelectValue placeholder="Select payment mode" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="CASH">CASH</SelectItem>
-                              <SelectItem value="BANK-TRANSFER">BANK-TRANSFER</SelectItem>
-                              <SelectItem value="UPI">UPI</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </div>
-                        <div className="space-y-2">
-                          <Label htmlFor="gateway-transaction-id">Gateway Transaction ID</Label>
-                          <Input
-                            id="gateway-transaction-id"
-                            value={gatewayTransactionId}
-                            onChange={(e) => setGatewayTransactionId(e.target.value)}
-                            placeholder="Enter transaction ID"
-                          />
-                        </div>
-                      </div>
-                      <Button className="mt-4 w-full" type="submit" disabled={submitLoading}>
-                        {submitLoading ? "Making Payment..." : "Make Payment"}
-                      </Button>
-                    </form>
                   </div>
                 ) : (
                   <div className="rounded-md border px-4 py-6 text-center text-gray-500">
@@ -846,51 +960,175 @@ const FeeManagement = () => {
             </Card>
           )}
 
-          <Card>
-            <CardContent className="overflow-x-auto p-4">
-              <div className="mb-4">
-                <h3 className="font-semibold">Payment Summaries</h3>
-                <p className="mt-1 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
-                  {paymentData.message}
-                </p>
-              </div>
+          <div className={`grid gap-6 ${feeSummary ? "lg:grid-cols-2" : ""}`}>
+            {feeSummary && (
+              <Card>
+                <CardContent className="p-4">
+                  {studentFeeInstallments.length > 0 ? (
+                    <>
+                      <div className="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 className="font-semibold">Installments</h3>
+                        <p className="text-sm text-slate-600">
+                          Total:{" "}
+                          {formatCurrency(
+                            studentFeeInstallments.reduce((sum, installment) => sum + (installment.amount || 0), 0),
+                          )}
+                        </p>
+                      </div>
 
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Payment Date</TableHead>
-                    <TableHead>Receipt No.</TableHead>
-                    <TableHead className="text-right">Payment Amount</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {paymentSummaries.length > 0 ? (
-                    paymentSummaries.map((payment, index) => (
-                      <TableRow key={`${payment.receiptNumber}-${payment.paymentDate}-${index}`}>
-                        <TableCell>{payment.paymentDate}</TableCell>
-                        <TableCell>
-                          <button
-                            type="button"
-                            onClick={() => void handleOpenReceipt(payment.receiptNumber)}
-                            className="font-semibold text-blue-700 underline-offset-4 hover:underline"
-                          >
-                            {payment.receiptNumber}
-                          </button>
-                        </TableCell>
-                        <TableCell className="text-right">{formatCurrency(payment.paymentAmount)}</TableCell>
-                      </TableRow>
-                    ))
+                      <Accordion type="multiple" className="w-full">
+                        {studentFeeInstallments.map((installment) => {
+                          const heads = Array.isArray(installment.studentFeeInstallmentHeads)
+                            ? installment.studentFeeInstallmentHeads
+                            : [];
+                          const headsTotal = heads.reduce((sum, head) => sum + (head.payableAmount || 0), 0);
+                          const isPaymentComplete =
+                            String(installment.paymentStatus ?? "").toUpperCase() === "COMPLETE";
+                          const isNextPayable =
+                            !isPaymentComplete && Boolean(nextPayableInstallment) && nextPayableInstallment.id === installment.id;
+
+                          return (
+                            <AccordionItem key={installment.id} value={`${installment.id}`}>
+                              <AccordionTrigger>
+                                <div className="grid w-full grid-cols-1 gap-2 text-left sm:grid-cols-[1fr_auto_1fr] sm:items-center">
+                                  <div className="text-slate-900">
+                                    {installment.installmentName || `Installment ${installment.installmentId}`}
+                                  </div>
+                                  <div className="text-sm text-slate-600 text-center">
+                                    {formatCurrency(installment.amount)}{" "}
+                                    <span className="text-slate-400">
+                                      (Heads: {formatCurrency(headsTotal)})
+                                    </span>
+                                  </div>
+                                  <div className="sm:text-right">
+                                    {!isPaymentComplete && (
+                                      <Button
+                                        type="button"
+                                        size="sm"
+                                        disabled={!isNextPayable}
+                                        onClick={(e) => {
+                                          e.preventDefault();
+                                          e.stopPropagation();
+                                          setSelectedInstallment(installment);
+                                          setPaymentMode("CASH");
+                                          setGatewayTransactionId("");
+                                          setInstallmentPaymentOpen(true);
+                                        }}
+                                      >
+                                        Make Payment
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+                              </AccordionTrigger>
+                              <AccordionContent>
+                                <div className="grid gap-3">
+                                  <div className="overflow-x-auto rounded-md border">
+                                    <Table>
+                                      <TableHeader>
+                                        <TableRow>
+                                          <TableHead>Fee Head</TableHead>
+                                          <TableHead className="text-right">Payable Amount</TableHead>
+                                        </TableRow>
+                                      </TableHeader>
+                                      <TableBody>
+                                        {heads.length > 0 ? (
+                                          heads.map((head) => (
+                                            <TableRow key={head.id}>
+                                              <TableCell>
+                                                {feeHeadNameById[head.feeHeadId] ?? `Fee Head ${head.feeHeadId}`}
+                                              </TableCell>
+                                              <TableCell className="text-right">
+                                                {formatCurrency(head.payableAmount)}
+                                              </TableCell>
+                                            </TableRow>
+                                          ))
+                                        ) : (
+                                          <TableRow>
+                                            <TableCell colSpan={2} className="text-center text-gray-500">
+                                              No installment heads available.
+                                            </TableCell>
+                                          </TableRow>
+                                        )}
+                                      </TableBody>
+                                    </Table>
+                                  </div>
+
+                                  <div className="grid gap-2 text-sm text-slate-600 sm:grid-cols-3">
+                                    <p>
+                                      <span className="font-medium text-slate-800">Academic Year:</span>{" "}
+                                      {installment.academicYearId}
+                                    </p>
+                                    <p>
+                                      <span className="font-medium text-slate-800">Installment Record:</span>{" "}
+                                      {installment.id}
+                                    </p>
+                                    <p>
+                                      <span className="font-medium text-slate-800">School:</span> {installment.schoolId}
+                                    </p>
+                                  </div>
+                                </div>
+                              </AccordionContent>
+                            </AccordionItem>
+                          );
+                        })}
+                      </Accordion>
+                    </>
                   ) : (
-                    <TableRow>
-                      <TableCell colSpan={3} className="text-center text-gray-500">
-                        No payment summaries available for this student.
-                      </TableCell>
-                    </TableRow>
+                    <div className="rounded-md border px-4 py-6 text-center text-gray-500">
+                      No installment details available for this student.
+                    </div>
                   )}
-                </TableBody>
-              </Table>
-            </CardContent>
-          </Card>
+                </CardContent>
+              </Card>
+            )}
+
+            <Card>
+              <CardContent className="overflow-x-auto p-4">
+                <div className="mb-4">
+                  <h3 className="font-semibold">Payment Summaries</h3>
+                  <p className="mt-1 rounded-md bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    {paymentData.message}
+                  </p>
+                </div>
+
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Payment Date</TableHead>
+                      <TableHead>Receipt No.</TableHead>
+                      <TableHead className="text-right">Payment Amount</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {paymentSummaries.length > 0 ? (
+                      paymentSummaries.map((payment, index) => (
+                        <TableRow key={`${payment.receiptNumber}-${payment.paymentDate}-${index}`}>
+                          <TableCell>{payment.paymentDate}</TableCell>
+                          <TableCell>
+                            <button
+                              type="button"
+                              onClick={() => void handleOpenReceipt(payment.receiptNumber)}
+                              className="font-semibold text-blue-700 underline-offset-4 hover:underline"
+                            >
+                              {payment.receiptNumber}
+                            </button>
+                          </TableCell>
+                          <TableCell className="text-right">{formatCurrency(payment.paymentAmount)}</TableCell>
+                        </TableRow>
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={3} className="text-center text-gray-500">
+                          No payment summaries available for this student.
+                        </TableCell>
+                      </TableRow>
+                    )}
+                  </TableBody>
+                </Table>
+              </CardContent>
+            </Card>
+          </div>
         </>
       )}
     </div>

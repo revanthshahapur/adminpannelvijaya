@@ -21,6 +21,11 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
+        "/registration-preview": {
+          target: apiTarget,
+          changeOrigin: true,
+          secure: false,
+        },
       },
     },
 
