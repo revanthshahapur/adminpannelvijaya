@@ -97,6 +97,16 @@ type StudentFeeInstallment = {
   studentFeeInstallmentHeads: StudentFeeInstallmentHead[];
 };
 
+type BankOption = {
+  id: number;
+  name: string;
+};
+
+type PaymentModeOption = {
+  id: number;
+  name: string;
+};
+
 type FeeSummaryResponse = {
   studentAccountId: number;
   studentId: number;
@@ -126,6 +136,16 @@ const FeeManagement = () => {
   const [installmentPaymentOpen, setInstallmentPaymentOpen] = useState(false);
   const [selectedInstallment, setSelectedInstallment] = useState<StudentFeeInstallment | null>(null);
   const [paymentMode, setPaymentMode] = useState("CASH");
+  const [paymentModeId, setPaymentModeId] = useState("");
+  const [paymentModes, setPaymentModes] = useState<PaymentModeOption[]>([]);
+  const [paymentModesLoading, setPaymentModesLoading] = useState(false);
+  const [paymentModesLoadedForSchoolId, setPaymentModesLoadedForSchoolId] = useState<string | null>(
+    null,
+  );
+  const [banks, setBanks] = useState<BankOption[]>([]);
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [banksLoadedForSchoolId, setBanksLoadedForSchoolId] = useState<string | null>(null);
+  const [selectedBankId, setSelectedBankId] = useState("");
   const [gatewayTransactionId, setGatewayTransactionId] = useState("");
   const trimmedSearch = search.trim();
 
@@ -268,6 +288,203 @@ const FeeManagement = () => {
     };
   };
 
+  const normalizeBankOptions = (payload: unknown): BankOption[] => {
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null;
+
+    const listRaw = Array.isArray(payload)
+      ? payload
+      : isRecord(payload) && Array.isArray(payload.data)
+        ? payload.data
+        : [];
+
+    return listRaw
+      .map((item) => {
+        if (!isRecord(item)) return null;
+
+        const idRaw = item["id"] ?? item["Id"] ?? item["bankId"] ?? item["bank_id"];
+        const nameRaw = item["name"] ?? item["Name"] ?? item["bankName"] ?? item["bank_name"];
+        const id = Number(idRaw);
+        const name = String(nameRaw ?? "").trim();
+
+        if (!Number.isFinite(id) || id <= 0 || !name) return null;
+        return { id, name } satisfies BankOption;
+      })
+      .filter(Boolean) as BankOption[];
+  };
+
+  const normalizePaymentModeOptions = (payload: unknown): PaymentModeOption[] => {
+    const isRecord = (value: unknown): value is Record<string, unknown> =>
+      typeof value === "object" && value !== null;
+
+    const listRaw = Array.isArray(payload)
+      ? payload
+      : isRecord(payload) && Array.isArray(payload.data)
+        ? payload.data
+        : [];
+
+    return listRaw
+      .map((item) => {
+        if (!isRecord(item)) return null;
+
+        const idRaw = item["id"] ?? item["Id"] ?? item["paymentModeId"] ?? item["payment_mode_id"];
+        const nameRaw = item["name"] ?? item["Name"] ?? item["paymentMode"] ?? item["payment_mode"];
+        const id = Number(idRaw);
+        const name = String(nameRaw ?? "").trim();
+
+        if (!Number.isFinite(id) || id <= 0 || !name) return null;
+        return { id, name } satisfies PaymentModeOption;
+      })
+      .filter(Boolean) as PaymentModeOption[];
+  };
+
+  const isCashPaymentMode = (mode: string) => String(mode ?? "").trim().toUpperCase() === "CASH";
+
+  useEffect(() => {
+    if (!installmentPaymentOpen) return;
+
+    const { token, schoolId } = getSessionContext();
+    if (!token || !schoolId) return;
+
+    const schoolIdStr = String(schoolId);
+    if (paymentModesLoadedForSchoolId === schoolIdStr && paymentModes.length > 0) return;
+
+    let cancelled = false;
+    const loadPaymentModes = async () => {
+      try {
+        setPaymentModesLoading(true);
+
+        const response = await fetch(`/api/utilities/schools/${schoolIdStr}/payment-modes`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const payload: unknown = await response.json();
+        if (!response.ok) {
+          const message =
+            typeof payload === "object" && payload !== null && "message" in payload
+              ? String((payload as Record<string, unknown>).message ?? "")
+              : "";
+          throw new Error(message || "Failed to load payment modes");
+        }
+
+        const options = normalizePaymentModeOptions(payload);
+        if (cancelled) return;
+
+        setPaymentModes(options);
+        setPaymentModesLoadedForSchoolId(schoolIdStr);
+
+        // If current selection isn't in the list, reset to CASH if present, else first option.
+        const hasSelection = options.some((m) => String(m.id) === String(paymentModeId));
+        if (!hasSelection) {
+          const cash = options.find((m) => isCashPaymentMode(m.name));
+          const fallback = cash ?? options[0] ?? null;
+          setPaymentModeId(fallback ? String(fallback.id) : "");
+          setPaymentMode(fallback?.name || "CASH");
+        } else {
+          const selected = options.find((m) => String(m.id) === String(paymentModeId)) ?? null;
+          if (selected && selected.name !== paymentMode) {
+            setPaymentMode(selected.name);
+          }
+        }
+      } catch (error) {
+        console.error("Error loading payment modes:", error);
+        if (!cancelled) {
+          setPaymentModes([]);
+          setPaymentModesLoadedForSchoolId(null);
+          toast.error(error instanceof Error ? error.message : "Failed to load payment modes");
+        }
+      } finally {
+        if (!cancelled) setPaymentModesLoading(false);
+      }
+    };
+
+    void loadPaymentModes();
+    return () => {
+      cancelled = true;
+    };
+    // paymentMode intentionally included so we can correct it if not in the loaded list.
+  }, [
+    installmentPaymentOpen,
+    paymentMode,
+    paymentModeId,
+    paymentModes.length,
+    paymentModesLoadedForSchoolId,
+  ]);
+
+  useEffect(() => {
+    if (!installmentPaymentOpen) return;
+
+    const selectedPaymentMode =
+      paymentModes.find((mode) => String(mode.id) === String(paymentModeId)) ??
+      paymentModes.find((mode) => mode.name === paymentMode) ??
+      null;
+
+    const modeName = selectedPaymentMode?.name ?? paymentMode;
+
+    if (isCashPaymentMode(modeName)) {
+      setSelectedBankId("");
+      return;
+    }
+
+    const { token, schoolId } = getSessionContext();
+    if (!token || !schoolId) return;
+
+    const schoolIdStr = String(schoolId);
+    if (banksLoadedForSchoolId === schoolIdStr && banks.length > 0) return;
+
+    let cancelled = false;
+    const loadBanks = async () => {
+      try {
+        setBanksLoading(true);
+
+        const response = await fetch(`/api/utilities/schools/${schoolIdStr}/banks`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const payload: unknown = await response.json();
+        if (!response.ok) {
+          const message =
+            typeof payload === "object" && payload !== null && "message" in payload
+              ? String((payload as Record<string, unknown>).message ?? "")
+              : "";
+          throw new Error(message || "Failed to load banks");
+        }
+
+        const options = normalizeBankOptions(payload);
+        if (cancelled) return;
+        setBanks(options);
+        setBanksLoadedForSchoolId(schoolIdStr);
+      } catch (error) {
+        console.error("Error loading banks:", error);
+        if (!cancelled) {
+          setBanks([]);
+          setBanksLoadedForSchoolId(null);
+          toast.error(error instanceof Error ? error.message : "Failed to load banks");
+        }
+      } finally {
+        if (!cancelled) setBanksLoading(false);
+      }
+    };
+
+    void loadBanks();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    installmentPaymentOpen,
+    paymentMode,
+    paymentModeId,
+    paymentModes,
+    banks.length,
+    banksLoadedForSchoolId,
+  ]);
+
   useEffect(() => {
     if (!trimmedSearch || trimmedSearch.length < 3) {
       setStudents([]);
@@ -327,6 +544,8 @@ const FeeManagement = () => {
       setInstallmentPaymentOpen(false);
       setSelectedInstallment(null);
       setPaymentMode("CASH");
+      setPaymentModeId("");
+      setSelectedBankId("");
       setGatewayTransactionId("");
 
       const { token, schoolId } = getSessionContext();
@@ -576,8 +795,27 @@ const FeeManagement = () => {
       return;
     }
 
+    const selectedPaymentMode =
+      paymentModes.find((mode) => String(mode.id) === String(paymentModeId)) ??
+      paymentModes.find((mode) => mode.name === paymentMode) ??
+      null;
+
+    if (!selectedPaymentMode) {
+      toast.error("Please select a payment mode.");
+      return;
+    }
+
     const amount = Number(selectedInstallment.amount || 0);
     const installmentId = Number(selectedInstallment.installmentId);
+    const requiresBank = !isCashPaymentMode(selectedPaymentMode.name);
+    const bankId = requiresBank ? Number(selectedBankId) : null;
+
+    if (requiresBank) {
+      if (!selectedBankId || !Number.isFinite(bankId) || (bankId ?? 0) <= 0) {
+        toast.error("Please select a bank.");
+        return;
+      }
+    }
 
     if (!Number.isFinite(installmentId) || installmentId <= 0) {
       toast.error("Installment ID is missing.");
@@ -598,7 +836,9 @@ const FeeManagement = () => {
           studentFeeAccountId: feeSummary.studentAccountId,
           installmentId,
           amount,
-          paymentMode,
+          paymentMode: selectedPaymentMode.name,
+          paymentModeId: selectedPaymentMode.id,
+          ...(requiresBank ? { bankId } : {}),
           gatewayTransactionId: gatewayTransactionId.trim() || null,
           createdByUserId,
           feeHeads,
@@ -616,6 +856,8 @@ const FeeManagement = () => {
       setSelectedInstallment(null);
       setGatewayTransactionId("");
       setPaymentMode("CASH");
+      setPaymentModeId("");
+      setSelectedBankId("");
       await handleSelectStudent(student);
     } catch (error) {
       console.error("Error making payment:", error);
@@ -624,6 +866,13 @@ const FeeManagement = () => {
       setSubmitLoading(false);
     }
   };
+
+  const selectedPaymentModeOption =
+    paymentModes.find((mode) => String(mode.id) === String(paymentModeId)) ??
+    paymentModes.find((mode) => mode.name === paymentMode) ??
+    null;
+  const paymentModeNameForUi = selectedPaymentModeOption?.name ?? paymentMode;
+  const showBankDropdown = Boolean(paymentModeNameForUi) && !isCashPaymentMode(paymentModeNameForUi);
 
   return (
     <div className="space-y-6 p-6">
@@ -635,6 +884,8 @@ const FeeManagement = () => {
             setSelectedInstallment(null);
             setGatewayTransactionId("");
             setPaymentMode("CASH");
+            setPaymentModeId("");
+            setSelectedBankId("");
           }
         }}
       >
@@ -659,17 +910,74 @@ const FeeManagement = () => {
 
             <div className="space-y-2">
               <Label htmlFor="installment-payment-mode">Payment Mode</Label>
-              <Select value={paymentMode} onValueChange={setPaymentMode}>
-                <SelectTrigger id="installment-payment-mode">
-                  <SelectValue placeholder="Select payment mode" />
+              <Select
+                value={paymentModeId}
+                onValueChange={(value) => {
+                  setPaymentModeId(value);
+                  const selected =
+                    paymentModes.find((mode) => String(mode.id) === String(value)) ?? null;
+                  if (selected) {
+                    setPaymentMode(selected.name);
+                  } else {
+                    setPaymentMode("");
+                  }
+                }}
+              >
+                <SelectTrigger
+                  id="installment-payment-mode"
+                  disabled={paymentModesLoading && paymentModes.length === 0}
+                >
+                  <SelectValue
+                    placeholder={paymentModesLoading ? "Loading payment modes..." : "Select payment mode"}
+                  />
                 </SelectTrigger>
                 <SelectContent>
-                  <SelectItem value="CASH">CASH</SelectItem>
-                  <SelectItem value="BANK-TRANSFER">BANK-TRANSFER</SelectItem>
-                  <SelectItem value="UPI">UPI</SelectItem>
+                  {paymentModesLoading && paymentModes.length === 0 && (
+                    <SelectItem value="__loading" disabled>
+                      Loading payment modes...
+                    </SelectItem>
+                  )}
+                  {!paymentModesLoading && paymentModes.length === 0 && (
+                    <SelectItem value="__empty" disabled>
+                      No payment modes found
+                    </SelectItem>
+                  )}
+                  {paymentModes.map((mode) => (
+                    <SelectItem key={mode.id} value={String(mode.id)}>
+                      {mode.name}
+                    </SelectItem>
+                  ))}
                 </SelectContent>
               </Select>
             </div>
+
+            {showBankDropdown && (
+              <div className="space-y-2">
+                <Label htmlFor="installment-bank">Bank</Label>
+                <Select value={selectedBankId} onValueChange={setSelectedBankId}>
+                  <SelectTrigger id="installment-bank" disabled={banksLoading && banks.length === 0}>
+                    <SelectValue placeholder={banksLoading ? "Loading banks..." : "Select bank"} />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {banksLoading && banks.length === 0 && (
+                      <SelectItem value="__loading" disabled>
+                        Loading banks...
+                      </SelectItem>
+                    )}
+                    {!banksLoading && banks.length === 0 && (
+                      <SelectItem value="__empty" disabled>
+                        No banks found
+                      </SelectItem>
+                    )}
+                    {banks.map((bank) => (
+                      <SelectItem key={bank.id} value={String(bank.id)}>
+                        {bank.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+            )}
 
             <div className="space-y-2">
               <Label htmlFor="installment-gateway-transaction-id">Gateway Transaction ID</Label>
