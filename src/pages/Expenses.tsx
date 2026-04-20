@@ -30,6 +30,16 @@ import { cn } from "@/lib/utils";
 
 type SearchOption = Record<string, unknown>;
 
+type PaymentModeOption = {
+  id: number;
+  name: string;
+};
+
+type BankOption = {
+  id: number;
+  name: string;
+};
+
 type ExpenseItem = {
   itemName: string;
   itemId: string;
@@ -51,6 +61,8 @@ type ExpenseFormValues = {
   subCategoryId: string;
   subCategoryName: string;
   paymentMode: string;
+  bankId: string;
+  bankName: string;
   paymentTxnRefNo: string;
   createdBY: string;
   items: ExpenseItem[];
@@ -188,6 +200,58 @@ const getItemUom = (option: SearchOption) =>
 
 const getItemRate = (option: SearchOption) =>
   pickString(option, ["rate", "price", "unitPrice", "cost", "sellingPrice"]);
+
+const normalizePaymentModeOptions = (payload: unknown): PaymentModeOption[] => {
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+
+  const listRaw = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload.data)
+      ? payload.data
+      : [];
+
+  return listRaw
+    .map((item) => {
+      if (!isRecord(item)) return null;
+
+      const idRaw = item["id"] ?? item["Id"] ?? item["paymentModeId"] ?? item["payment_mode_id"];
+      const nameRaw = item["name"] ?? item["Name"] ?? item["paymentMode"] ?? item["payment_mode"];
+      const id = Number(idRaw);
+      const name = String(nameRaw ?? "").trim();
+
+      if (!Number.isFinite(id) || id <= 0 || !name) return null;
+      return { id, name } satisfies PaymentModeOption;
+    })
+    .filter(Boolean) as PaymentModeOption[];
+};
+
+const isCashPaymentMode = (mode: string) => String(mode ?? "").trim().toUpperCase() === "CASH";
+
+const normalizeBankOptions = (payload: unknown): BankOption[] => {
+  const isRecord = (value: unknown): value is Record<string, unknown> =>
+    typeof value === "object" && value !== null;
+
+  const listRaw = Array.isArray(payload)
+    ? payload
+    : isRecord(payload) && Array.isArray(payload.data)
+      ? payload.data
+      : [];
+
+  return listRaw
+    .map((item) => {
+      if (!isRecord(item)) return null;
+
+      const idRaw = item["id"] ?? item["Id"] ?? item["bankId"] ?? item["bank_id"];
+      const nameRaw = item["name"] ?? item["Name"] ?? item["bankName"] ?? item["bank_name"];
+      const id = Number(idRaw);
+      const name = String(nameRaw ?? "").trim();
+
+      if (!Number.isFinite(id) || id <= 0 || !name) return null;
+      return { id, name } satisfies BankOption;
+    })
+    .filter(Boolean) as BankOption[];
+};
 
 const calculateAmount = (quantityValue: string, rateValue: string) => {
   const quantity = Number.parseFloat(quantityValue || "0");
@@ -432,6 +496,14 @@ const Expenses = () => {
   const { createdByUserId } = getSessionContext();
   const [showForm, setShowForm] = useState(false);
   const [submittedExpense, setSubmittedExpense] = useState<SubmittedExpenseResponse | null>(null);
+  const [paymentModes, setPaymentModes] = useState<PaymentModeOption[]>([]);
+  const [paymentModesLoading, setPaymentModesLoading] = useState(false);
+  const [paymentModesLoadedForSchoolId, setPaymentModesLoadedForSchoolId] = useState<string | null>(
+    null,
+  );
+  const [banks, setBanks] = useState<BankOption[]>([]);
+  const [banksLoading, setBanksLoading] = useState(false);
+  const [banksLoadedForSchoolId, setBanksLoadedForSchoolId] = useState<string | null>(null);
 
   const {
     control,
@@ -453,6 +525,8 @@ const Expenses = () => {
       subCategoryId: "",
       subCategoryName: "",
       paymentMode: "CASH",
+      bankId: "",
+      bankName: "",
       paymentTxnRefNo: "",
       createdBY: createdByUserId,
       items: [
@@ -481,6 +555,14 @@ const Expenses = () => {
     control,
     name: "expenseDate",
   });
+  const watchedPaymentMode = useWatch({
+    control,
+    name: "paymentMode",
+  });
+  const watchedBankId = useWatch({
+    control,
+    name: "bankId",
+  });
   const totalAmount = useMemo(
     () =>
       (watchedItems || []).reduce((sum, item) => {
@@ -491,6 +573,10 @@ const Expenses = () => {
       }, 0),
     [watchedItems],
   );
+
+  const selectedPaymentModeNameForUi = String(watchedPaymentMode ?? "").trim();
+  const showBankDropdown =
+    Boolean(selectedPaymentModeNameForUi) && !isCashPaymentMode(selectedPaymentModeNameForUi);
 
   useEffect(() => {
     setValue("createdBY", createdByUserId);
@@ -508,6 +594,151 @@ const Expenses = () => {
       }
     });
   }, [setValue, watchedItems]);
+
+  useEffect(() => {
+    if (!showForm) return;
+
+    // If mode becomes CASH, clear bank selection.
+    if (!showBankDropdown) {
+      if (watchedBankId) {
+        setValue("bankId", "", { shouldDirty: true, shouldValidate: false });
+      }
+      setValue("bankName", "", { shouldDirty: true, shouldValidate: false });
+    }
+  }, [setValue, showBankDropdown, showForm, watchedBankId]);
+
+  useEffect(() => {
+    if (!showForm) return;
+
+    const { token, schoolId } = getSessionContext();
+    if (!token || !schoolId) return;
+
+    if (paymentModesLoadedForSchoolId === schoolId && paymentModes.length > 0) return;
+
+    let cancelled = false;
+    const loadPaymentModes = async () => {
+      try {
+        setPaymentModesLoading(true);
+        const response = await fetch(`/api/utilities/schools/${schoolId}/payment-modes`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const payload: unknown = await response.json();
+        if (!response.ok) {
+          const message =
+            typeof payload === "object" && payload !== null && "message" in payload
+              ? String((payload as Record<string, unknown>).message ?? "")
+              : "";
+          throw new Error(message || "Failed to load payment modes");
+        }
+
+        const options = normalizePaymentModeOptions(payload);
+        if (cancelled) return;
+
+        setPaymentModes(options);
+        setPaymentModesLoadedForSchoolId(schoolId);
+
+        // If current selection isn't in the list, reset to CASH if present, else first option.
+        const current = String(watchedPaymentMode ?? "").trim();
+        const hasSelection = options.some((m) => m.name === current);
+        if (!hasSelection) {
+          const cash = options.find((m) => isCashPaymentMode(m.name));
+          const fallback = cash?.name ?? options[0]?.name ?? "";
+          setValue("paymentMode", fallback, { shouldDirty: false, shouldValidate: false });
+        }
+      } catch (error) {
+        console.error("Error loading payment modes:", error);
+        if (!cancelled) {
+          setPaymentModes([]);
+          setPaymentModesLoadedForSchoolId(null);
+          toast.error(error instanceof Error ? error.message : "Failed to load payment modes");
+        }
+      } finally {
+        if (!cancelled) setPaymentModesLoading(false);
+      }
+    };
+
+    void loadPaymentModes();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    paymentModes.length,
+    paymentModesLoadedForSchoolId,
+    setValue,
+    showForm,
+    watchedPaymentMode,
+  ]);
+
+  useEffect(() => {
+    if (!showForm) return;
+    if (!showBankDropdown) return;
+
+    const { token, schoolId } = getSessionContext();
+    if (!token || !schoolId) return;
+
+    if (banksLoadedForSchoolId === schoolId && banks.length > 0) return;
+
+    let cancelled = false;
+    const loadBanks = async () => {
+      try {
+        setBanksLoading(true);
+
+        const response = await fetch(`/api/utilities/schools/${schoolId}/banks`, {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+
+        const payload: unknown = await response.json();
+        if (!response.ok) {
+          const message =
+            typeof payload === "object" && payload !== null && "message" in payload
+              ? String((payload as Record<string, unknown>).message ?? "")
+              : "";
+          throw new Error(message || "Failed to load banks");
+        }
+
+        const options = normalizeBankOptions(payload);
+        if (cancelled) return;
+
+        setBanks(options);
+        setBanksLoadedForSchoolId(schoolId);
+
+        // Clear selection if the current bankId isn't in the loaded list.
+        const hasSelection = options.some((b) => String(b.id) === String(watchedBankId));
+        if (!hasSelection) {
+          setValue("bankId", "", { shouldDirty: false, shouldValidate: false });
+          setValue("bankName", "", { shouldDirty: false, shouldValidate: false });
+        }
+      } catch (error) {
+        console.error("Error loading banks:", error);
+        if (!cancelled) {
+          setBanks([]);
+          setBanksLoadedForSchoolId(null);
+          toast.error(error instanceof Error ? error.message : "Failed to load banks");
+        }
+      } finally {
+        if (!cancelled) setBanksLoading(false);
+      }
+    };
+
+    void loadBanks();
+    return () => {
+      cancelled = true;
+    };
+  }, [
+    banks.length,
+    banksLoadedForSchoolId,
+    setValue,
+    showBankDropdown,
+    showForm,
+    watchedBankId,
+  ]);
 
   const handleSubmitExpense = async (values: ExpenseFormValues) => {
     const { token, schoolId, createdByUserId } = getSessionContext();
@@ -527,6 +758,13 @@ const Expenses = () => {
       return;
     }
 
+    const requiresBank = !isCashPaymentMode(values.paymentMode);
+    const bankId = values.bankId ? Number(values.bankId) : null;
+    if (requiresBank && (!bankId || !Number.isFinite(bankId))) {
+      toast.error("Please select bank name for non-cash payment modes.");
+      return;
+    }
+
     const payload = {
       categoryId: values.categoryId ? Number(values.categoryId) : null,
       subCategoryId: values.subCategoryId ? Number(values.subCategoryId) : null,
@@ -537,6 +775,7 @@ const Expenses = () => {
       expenseDate: values.expenseDate,
       paymentMode:
         values.paymentMode === "BANK-TRANSFER" ? "BANK_TRAN" : values.paymentMode,
+      ...(requiresBank ? { bankId } : {}),
       paymentTxnRefNo: values.paymentTxnRefNo.trim() || null,
       createdBy: Number(createdByUserId),
       items: values.items
@@ -774,19 +1013,88 @@ const Expenses = () => {
                     name="paymentMode"
                     control={control}
                     render={({ field }) => (
-                      <Select value={field.value} onValueChange={field.onChange}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Select payment mode" />
+                      <Select
+                        value={field.value}
+                        onValueChange={(value) => {
+                          setSubmittedExpense(null);
+                          field.onChange(value);
+                        }}
+                      >
+                        <SelectTrigger disabled={paymentModesLoading && paymentModes.length === 0}>
+                          <SelectValue
+                            placeholder={
+                              paymentModesLoading ? "Loading payment modes..." : "Select payment mode"
+                            }
+                          />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="CASH">CASH</SelectItem>
-                          <SelectItem value="UPI">UPI</SelectItem>
-                          <SelectItem value="BANK-TRANSFER">BANK-TRANSFER</SelectItem>
+                          {paymentModesLoading && paymentModes.length === 0 && (
+                            <SelectItem value="__loading" disabled>
+                              Loading payment modes...
+                            </SelectItem>
+                          )}
+                          {!paymentModesLoading && paymentModes.length === 0 && (
+                            <SelectItem value="__empty" disabled>
+                              No payment modes found
+                            </SelectItem>
+                          )}
+                          {paymentModes.map((mode) => (
+                            <SelectItem key={mode.id} value={mode.name}>
+                              {mode.name}
+                            </SelectItem>
+                          ))}
                         </SelectContent>
                       </Select>
                     )}
                   />
                 </div>
+
+                {showBankDropdown && (
+                  <div className="space-y-2">
+                    <Label>Bank Name</Label>
+                    <Controller
+                      name="bankId"
+                      control={control}
+                      render={({ field }) => (
+                        <Select
+                          value={field.value}
+                          onValueChange={(value) => {
+                            setSubmittedExpense(null);
+                            field.onChange(value);
+                            const selected = banks.find((b) => String(b.id) === String(value)) ?? null;
+                            setValue("bankName", selected?.name ?? "", {
+                              shouldDirty: true,
+                              shouldValidate: false,
+                            });
+                          }}
+                        >
+                          <SelectTrigger disabled={banksLoading && banks.length === 0}>
+                            <SelectValue
+                              placeholder={banksLoading ? "Loading banks..." : "Select bank name"}
+                            />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {banksLoading && banks.length === 0 && (
+                              <SelectItem value="__loading" disabled>
+                                Loading banks...
+                              </SelectItem>
+                            )}
+                            {!banksLoading && banks.length === 0 && (
+                              <SelectItem value="__empty" disabled>
+                                No banks found
+                              </SelectItem>
+                            )}
+                            {banks.map((bank) => (
+                              <SelectItem key={bank.id} value={String(bank.id)}>
+                                {bank.name}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      )}
+                    />
+                  </div>
+                )}
 
                 <div className="space-y-2">
                   <Label>Payment Transaction Ref No</Label>
@@ -801,6 +1109,7 @@ const Expenses = () => {
               <Input type="hidden" {...register("categoryId")} />
               <Input type="hidden" {...register("subCategoryId")} />
               <Input type="hidden" {...register("createdBY")} />
+              <Input type="hidden" {...register("bankName")} />
             </CardContent>
           </Card>
 
