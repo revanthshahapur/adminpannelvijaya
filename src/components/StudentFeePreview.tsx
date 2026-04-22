@@ -2,6 +2,7 @@ import { Fragment, useEffect, useMemo, useState } from "react";
 import { toast } from "sonner";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -11,6 +12,14 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { formatINR } from "@/lib/utils";
+
+type TransportRouteSearchResult = {
+  routeId: number;
+  routeName: string;
+  routeStopId: number;
+  stopName: string;
+  amount: number;
+};
 
 type StudentFeePreviewProps = {
   studentData: any;
@@ -34,6 +43,13 @@ const StudentFeePreview = ({
   const [concessionType, setConcessionType] = useState<string>("");
   const [concessionReference, setConcessionReference] = useState<string>("");
   const [expandedInstallmentId, setExpandedInstallmentId] = useState<number | null>(null);
+
+  const [requiresTransport, setRequiresTransport] = useState(false);
+  const [requiresHostel, setRequiresHostel] = useState(false);
+  const [transportStopName, setTransportStopName] = useState("");
+  const [transportSearchResults, setTransportSearchResults] = useState<TransportRouteSearchResult[]>([]);
+  const [transportSearchLoading, setTransportSearchLoading] = useState(false);
+  const [selectedTransportRoute, setSelectedTransportRoute] = useState<TransportRouteSearchResult | null>(null);
 
   const schoolConcessions = useMemo(
     () => (Array.isArray(studentData?.schoolConcessions) ? studentData.schoolConcessions : []),
@@ -69,33 +85,115 @@ const StudentFeePreview = ({
     setConcessionReference("");
     setExpandedInstallmentId(null);
     setIsFeeSubmitted(false);
+    setRequiresTransport(false);
+    setRequiresHostel(false);
+    setTransportStopName("");
+    setTransportSearchResults([]);
+    setSelectedTransportRoute(null);
+    setTransportSearchLoading(false);
   }, [schoolConcessions, studentData]);
 
-  const totalAmount = studentData
-    ? studentData.feeStructure.items.reduce(
-        (sum: number, item: any) => sum + item.amount,
-        0
-      )
-    : 0;
+  const previewItems = useMemo(() => {
+    const baseItems = Array.isArray(studentData?.feeStructure?.items)
+      ? studentData.feeStructure.items
+      : [];
 
-  const totalDiscountableAmount = studentData
-    ? studentData.feeStructure.items.reduce((sum: number, item: any) => {
-        return item.isDiscountAllowed ? sum + item.amount : sum;
-      }, 0)
-    : 0;
+    const transportMode = Boolean(requiresTransport && !requiresHostel);
+    const hostelMode = Boolean(requiresHostel && !requiresTransport);
+    const transportSelected = Boolean(transportMode && selectedTransportRoute);
+
+    const routeAmount = transportSelected ? Number(selectedTransportRoute?.amount ?? 0) : 0;
+    const routeLabelSuffix =
+      transportSelected && selectedTransportRoute
+        ? `${selectedTransportRoute.routeName} (${selectedTransportRoute.stopName})`
+        : "";
+
+    const transportIndex = baseItems.findIndex((item: any) => {
+      const name = String(item?.name ?? "").toLowerCase();
+      return name.includes("transport");
+    });
+
+    const hostelIndex = baseItems.findIndex((item: any) => {
+      const name = String(item?.name ?? "").toLowerCase();
+      return name.includes("hostel");
+    });
+
+    // Start from base items and apply facility-specific overrides.
+    const updatedItems = baseItems.map((item: any, index: number) => {
+      if (index === transportIndex) {
+        // Hostel selected: force transport amount to 0.
+        if (hostelMode) {
+          return { ...item, amount: 0 };
+        }
+
+        // Transport mode: until route is selected amount stays 0; once selected inject route amount + label.
+        if (transportMode) {
+          const baseName = String(item?.name ?? "Transport Fee").trim() || "Transport Fee";
+          if (transportSelected) {
+            return {
+              ...item,
+              name: `${baseName} - ${routeLabelSuffix}`,
+              amount: routeAmount,
+            };
+          }
+
+          return { ...item, amount: 0, name: baseName };
+        }
+      }
+
+      if (index === hostelIndex) {
+        // Hostel is opt-in: default amount is 0 unless hostel is selected.
+        // Transport mode also forces hostel amount to 0.
+        if (!hostelMode) {
+          return { ...item, amount: 0 };
+        }
+      }
+
+      return item;
+    });
+
+    // No existing transport head; append a dedicated one for preview purposes when transport is selected.
+    if (transportSelected && transportIndex < 0) {
+      return [
+        ...updatedItems,
+        {
+          feeHeadId: -999999,
+          name: `Transport Fee - ${routeLabelSuffix}`,
+          amount: routeAmount,
+          isDiscountAllowed: false,
+          maxDiscountPercentage: 0,
+        },
+      ];
+    }
+
+    return updatedItems;
+  }, [requiresHostel, requiresTransport, selectedTransportRoute, studentData]);
+
+  const totalAmount = previewItems.reduce((sum: number, item: any) => sum + Number(item?.amount ?? 0), 0);
+
+  const totalDiscountableAmount = previewItems.reduce((sum: number, item: any) => {
+    return item?.isDiscountAllowed ? sum + Number(item?.amount ?? 0) : sum;
+  }, 0);
 
   const totalDiscount = Math.min(Math.max(concessionAmount, 0), totalDiscountableAmount);
   const finalAmount = totalAmount - totalDiscount;
   const installments = studentData?.installments || [];
-  const feeHeadFinalAmounts = studentData
-    ? studentData.feeStructure.items.reduce((acc: Record<number, number>, item: any) => {
-        const itemDiscount = item.isDiscountAllowed && totalDiscountableAmount > 0
-          ? (item.amount / totalDiscountableAmount) * totalDiscount
-          : 0;
-        acc[item.feeHeadId] = item.amount - itemDiscount;
-        return acc;
-      }, {})
-    : {};
+  const feeHeadFinalAmounts = previewItems.reduce((acc: Record<number, number>, item: any) => {
+    const itemAmount = Number(item?.amount ?? 0);
+    const itemDiscount = item?.isDiscountAllowed && totalDiscountableAmount > 0
+      ? (itemAmount / totalDiscountableAmount) * totalDiscount
+      : 0;
+    const feeHeadIdRaw = item?.feeHeadId;
+    if (feeHeadIdRaw === null || feeHeadIdRaw === undefined) {
+      return acc;
+    }
+
+    const feeHeadId = Number(feeHeadIdRaw);
+    if (Number.isFinite(feeHeadId)) {
+      acc[feeHeadId] = itemAmount - itemDiscount;
+    }
+    return acc;
+  }, {});
 
   const getConcessionAmountByName = (name: string, concessions: any[]) => {
     if (!name || name === "NO CONCESSION") {
@@ -113,6 +211,93 @@ const StudentFeePreview = ({
     }
   };
 
+  useEffect(() => {
+    if (!requiresTransport) {
+      setTransportSearchResults([]);
+      setTransportSearchLoading(false);
+      return;
+    }
+
+    const trimmedStopName = transportStopName.trim();
+    if (trimmedStopName.length < 3) {
+      setTransportSearchResults([]);
+      setTransportSearchLoading(false);
+      return;
+    }
+
+    if (
+      selectedTransportRoute &&
+      trimmedStopName === String(selectedTransportRoute.stopName ?? "").trim()
+    ) {
+      setTransportSearchResults([]);
+      setTransportSearchLoading(false);
+      return;
+    }
+
+    const token = localStorage.getItem("authToken");
+    if (!token) {
+      setTransportSearchResults([]);
+      setTransportSearchLoading(false);
+      return;
+    }
+
+    const schoolId = studentData?.student?.schoolId;
+    if (!schoolId) {
+      setTransportSearchResults([]);
+      setTransportSearchLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    const controller = new AbortController();
+
+    const timer = window.setTimeout(async () => {
+      try {
+        setTransportSearchLoading(true);
+
+        const response = await fetch(
+          `/api/utilities/schools/${encodeURIComponent(String(schoolId))}/transport-routes/search?stopName=${encodeURIComponent(trimmedStopName)}`,
+          {
+            method: "GET",
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+            signal: controller.signal,
+          }
+        );
+
+        const payload = (await response.json().catch(() => null)) as unknown;
+
+        if (!response.ok) {
+          const message =
+            payload && typeof payload === "object" && "message" in (payload as Record<string, unknown>)
+              ? String((payload as Record<string, unknown>).message ?? "")
+              : "";
+          throw new Error(message || "Failed to search transport routes");
+        }
+
+        const results = Array.isArray(payload) ? (payload as TransportRouteSearchResult[]) : [];
+        if (cancelled) return;
+        setTransportSearchResults(results);
+      } catch (error) {
+        if (cancelled) return;
+        if (error instanceof DOMException && error.name === "AbortError") return;
+
+        console.error("Transport route search failed:", error);
+        setTransportSearchResults([]);
+        toast.error(error instanceof Error ? error.message : "Failed to search transport routes");
+      } finally {
+        if (!cancelled) setTransportSearchLoading(false);
+      }
+    }, 350);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+      controller.abort();
+    };
+  }, [requiresTransport, selectedTransportRoute, studentData?.student?.schoolId, transportStopName]);
+
   const handleFeeSubmit = async () => {
     try {
       const token = localStorage.getItem("authToken");
@@ -122,6 +307,11 @@ const StudentFeePreview = ({
       }
 
       if (!studentData) {
+        return;
+      }
+
+      if (requiresTransport && !selectedTransportRoute) {
+        toast.error("Please select a transport route");
         return;
       }
 
@@ -139,6 +329,85 @@ const StudentFeePreview = ({
         toast.error("Selected concession is not available. Please re-select concession type.");
         return;
       }
+
+      // Send the computed preview alongside the original inputs so the backend can persist/re-verify
+      // the exact fee breakup (heads + installments) used at finalization time.
+      const feeHeadPreviews = previewItems.map((item: any) => {
+        const grossAmount = Number(item?.amount ?? 0);
+        const discountAmount =
+          item?.isDiscountAllowed && totalDiscountableAmount > 0
+            ? (grossAmount / totalDiscountableAmount) * totalDiscount
+            : 0;
+        const netAmount = grossAmount - discountAmount;
+
+        return {
+          feeHeadId: item?.feeHeadId ?? item?.id ?? null,
+          feeHeadName: item?.name ?? null,
+          grossAmount,
+          discountAmount,
+          netAmount,
+          isDiscountAllowed: Boolean(item?.isDiscountAllowed),
+          maxDiscountPercentage: Number(item?.maxDiscountPercentage ?? 0),
+        };
+      });
+
+      const installmentPreviews = (installments || []).map((installment: any) => {
+        const installmentHeads = Array.isArray(installment?.installmentHeads)
+          ? installment.installmentHeads
+          : [];
+
+        const heads = installmentHeads.map((head: any) => {
+          const pct = Number(head?.percentage ?? 0);
+          const feeHeadFinalAmount = Number(feeHeadFinalAmounts[head?.feeHeadId] ?? head?.amount ?? 0);
+          const amount = (feeHeadFinalAmount * pct) / 100;
+          return {
+            installmentHeadId: head?.id ?? null,
+            feeHeadId: head?.feeHeadId ?? null,
+            feeHeadName: head?.feeHeadName ?? null,
+            percentage: pct,
+            amount,
+          };
+        });
+
+        const amount = heads.reduce((sum: number, h: any) => sum + Number(h?.amount ?? 0), 0);
+
+        return {
+          installmentId: installment?.id ?? null,
+          installmentName: installment?.name ?? null,
+          dueDate: installment?.dueDate ?? null,
+          amount,
+          heads,
+        };
+      });
+
+      const feePreview = {
+        totals: {
+          grossAmount: totalAmount,
+          discountAmount: totalDiscount,
+          netAmount: finalAmount,
+        },
+        feeHeads: feeHeadPreviews,
+        installments: installmentPreviews,
+        facilities: {
+          transportRequired: Boolean(requiresTransport),
+          transportRouteId: requiresTransport ? (selectedTransportRoute?.routeId ?? null) : null,
+          transportRouteStopId: requiresTransport ? (selectedTransportRoute?.routeStopId ?? null) : null,
+          hostelRequired: Boolean(requiresHostel),
+        },
+        concession: {
+          concessionId: isConcessionSelected
+            ? (selectedConcession?.id ??
+                selectedConcession?.concessionId ??
+                selectedConcession?.concession_id ??
+                null)
+            : null,
+          concessionName: isConcessionSelected
+            ? (selectedConcession?.name ?? concessionType ?? null)
+            : null,
+          concessionAmount: Number(concessionAmount ?? 0),
+          concessionReference: isConcessionSelected ? concessionReference.trim() : null,
+        },
+      };
 
       const payload = {
         schoolId: studentData.student.schoolId,
@@ -158,10 +427,15 @@ const StudentFeePreview = ({
           ? (selectedConcession?.name ?? concessionType ?? null)
           : null,
         concessionReference: isConcessionSelected ? concessionReference.trim() : null,
+        transportRequired: requiresTransport,
+        transportRouteId: requiresTransport ? (selectedTransportRoute?.routeId ?? null) : null,
+        transportRouteStopId: requiresTransport ? (selectedTransportRoute?.routeStopId ?? null) : null,
+        hostelRequired: requiresHostel,
+        feePreview,
       };
 
       const response = await fetch(
-        "/api/student-fees-accounts/registerStudentFeeAccount",
+        "/api/student-fees-accounts/finalizeFee",
         {
           method: "POST",
           headers: {
@@ -236,21 +510,24 @@ const StudentFeePreview = ({
             </thead>
 
             <tbody>
-              {studentData.feeStructure.items.map((item: any) => {
+              {previewItems.map((item: any, index: number) => {
                 const discount = item.isDiscountAllowed && totalDiscountableAmount > 0
                   ? (item.amount / totalDiscountableAmount) * totalDiscount
                   : 0;
                 const final = item.amount - discount;
 
                 return (
-                  <tr key={item.feeHeadId} className="border hover:bg-gray-50">
+                  <tr
+                    key={String(item?.feeHeadId ?? item?.id ?? item?.name ?? index)}
+                    className="border hover:bg-gray-50"
+                  >
                     <td className="p-2 border">{item.name}</td>
 
                     <td className="p-2 border relative group cursor-pointer text-right">
                       {formatINR(Number(item.amount || 0))}
                       <div className="absolute hidden group-hover:block bg-black text-white text-xs px-2 py-1 rounded -top-7 left-1/2 -translate-x-1/2">
                         {item.isDiscountAllowed
-                          ? `Max Discount: ${item.maxDiscountPercentage}%`
+                          ? `Max Discount: ${Number(item.maxDiscountPercentage ?? 0)}%`
                           : "Discount not applicable for this fee"}
                       </div>
                     </td>
@@ -271,6 +548,120 @@ const StudentFeePreview = ({
 
           {!isFeeSubmitted && (
             <>
+              <div className="rounded-md border p-4 bg-white space-y-3">
+                <div className="flex flex-wrap items-center gap-6">
+                  <label className="flex items-center gap-2 text-slate-800">
+                    <Checkbox
+                      checked={requiresTransport}
+                      onCheckedChange={(next) => {
+                        const nextValue = Boolean(next);
+                        setRequiresTransport(nextValue);
+                        if (nextValue) {
+                          setRequiresHostel(false);
+                        } else {
+                          setTransportStopName("");
+                          setTransportSearchResults([]);
+                          setSelectedTransportRoute(null);
+                          setTransportSearchLoading(false);
+                        }
+                      }}
+                      aria-label="Requires transport"
+                    />
+                    <span className="text-sm font-medium">Requires Transport</span>
+                  </label>
+
+                  <label className="flex items-center gap-2 text-slate-800">
+                    <Checkbox
+                      checked={requiresHostel}
+                      onCheckedChange={(next) => {
+                        const nextValue = Boolean(next);
+                        setRequiresHostel(nextValue);
+                        if (nextValue) {
+                          setRequiresTransport(false);
+                          setTransportStopName("");
+                          setTransportSearchResults([]);
+                          setSelectedTransportRoute(null);
+                          setTransportSearchLoading(false);
+                        }
+                      }}
+                      aria-label="Requires hostel facility"
+                    />
+                    <span className="text-sm font-medium">Hostel Facility</span>
+                  </label>
+                </div>
+
+                {requiresTransport ? (
+                  <div className="space-y-2">
+                    <div className="space-y-1">
+                      <span className="block text-sm text-slate-700">Transport Stop Name</span>
+                      <Input
+                        value={transportStopName}
+                        onChange={(e) => {
+                          setTransportStopName(e.target.value);
+                          setSelectedTransportRoute(null);
+                        }}
+                        placeholder="Type min 3 characters to search..."
+                      />
+                      <div className="flex items-center justify-between gap-2">
+                        <p className="text-xs text-muted-foreground">
+                          Enter at least 3 characters to search.
+                        </p>
+                        {transportSearchLoading ? (
+                          <p className="text-xs text-muted-foreground">Searching...</p>
+                        ) : null}
+                      </div>
+                    </div>
+
+                    {selectedTransportRoute ? (
+                      <div className="text-sm text-slate-800">
+                        Selected:{" "}
+                        <span className="font-medium">
+                          {selectedTransportRoute.routeName} - {selectedTransportRoute.stopName} (
+                          {formatINR(Number(selectedTransportRoute.amount ?? 0))})
+                        </span>
+                      </div>
+                    ) : null}
+
+                    {transportStopName.trim().length >= 3 && !selectedTransportRoute ? (
+                      <div className="border rounded-md bg-slate-50">
+                        {transportSearchResults.length === 0 && !transportSearchLoading ? (
+                          <div className="p-3 text-sm text-muted-foreground">No routes found.</div>
+                        ) : (
+                          <div className="max-h-48 overflow-auto">
+                            {transportSearchResults.map((option) => (
+                              <button
+                                key={`${option.routeId}-${option.stopName}`}
+                                type="button"
+                                onClick={() => {
+                                  setSelectedTransportRoute(option);
+                                  setTransportStopName(option.stopName);
+                                  setTransportSearchResults([]);
+                                }}
+                                className="w-full text-left px-3 py-2 hover:bg-white border-b last:border-b-0"
+                              >
+                                <div className="flex items-center justify-between gap-3">
+                                  <div className="min-w-0">
+                                    <div className="text-sm font-medium text-slate-800 truncate">
+                                      {option.stopName}
+                                    </div>
+                                    <div className="text-xs text-muted-foreground truncate">
+                                      {option.routeName}
+                                    </div>
+                                  </div>
+                                  <div className="text-sm font-semibold text-slate-900">
+                                    {formatINR(Number(option.amount ?? 0))}
+                                  </div>
+                                </div>
+                              </button>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+
               {/*
                 Concession reference is mandatory for any concession type other than "NO CONCESSION".
                 Concession amount is derived from concession type, so it must not be editable.
@@ -345,7 +736,7 @@ const StudentFeePreview = ({
                 <Button
                   className="bg-green-600 hover:bg-green-700 text-white px-6"
                   onClick={handleFeeSubmit}
-                  disabled={isReferenceMissing}
+                  disabled={isReferenceMissing || (requiresTransport && !selectedTransportRoute)}
                 >
                   Finalise Fee
                 </Button>
