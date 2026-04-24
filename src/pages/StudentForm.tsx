@@ -940,7 +940,15 @@ const StudentForm = ({ onClose, onFeeFinalized }: { onClose?: () => void; onFeeF
                     />
                   </div>
 
-                  <Button type="button" variant="destructive" onClick={() => remove(index)}>
+                  <Button
+                    type="button"
+                    variant="destructive"
+                    disabled={fields.length <= 1}
+                    onClick={() => {
+                      if (fields.length <= 1) return;
+                      remove(index);
+                    }}
+                  >
                     Remove
                   </Button>
                 </CardContent>
